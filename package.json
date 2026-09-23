@@ -1,0 +1,48 @@
+{
+  "name": "aether",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Luna's product-readiness hub: launches, certifications, manuals, returns and competitive research.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch-path=server --env-file-if-exists=.env server/index.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "user:create": "node --env-file-if-exists=.env scripts/create-user.js",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "bcryptjs": "^3.0.2",
+    "connect-pg-simple": "^10.0.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.18.1",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-local": "^1.0.0",
+    "pg": "^8.13.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "vite": "^6.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "supertest": "^7.0.0",
+    "vitest": "^5.0.1"
+  }
+}
