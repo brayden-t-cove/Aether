@@ -1,0 +1,4 @@
+name,sku,category,lifecycle,launch_date,sunset_date,markets,channels,odyssey_name,notes
+Example Lightbulb Camera,LUNA-LBC-01,Camera,active,2025-03-01,,US;CA,Amazon;TikTok,Lightbulb Camera,Example row - delete me
+Example Doorbell V1,LUNA-DB-01,Doorbell,sunset,2022-06-01,2025-12-31,US,Amazon,,Example row - replaced by V2
+Example Floodlight Cam,LUNA-FLC-01,Camera,upcoming,2026-Q2,,US;UK,,,Example row - target launch
