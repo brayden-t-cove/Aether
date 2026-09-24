@@ -255,6 +255,7 @@ function planProject(raw, ctx, plannedProducts, seen) {
     if (due === undefined) warnings.push(`"${title}": couldn't read due date "${it.due_date}"`);
     items.push({
       title,
+      stage: clean(it.stage),
       category,
       state: itemState,
       owner_id: owner(it.owner),

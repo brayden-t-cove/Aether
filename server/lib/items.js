@@ -4,6 +4,7 @@ import { v } from './validate.js';
 
 export const ITEM_FIELDS = {
   title: v.text({ label: 'Title', required: true, max: 300 }),
+  stage: v.text({ label: 'Stage', max: 100 }),
   category: v.oneOf(ITEM_CATEGORIES, { label: 'Category' }),
   owner_id: v.id({ label: 'Owner' }),
   state: v.oneOf(STATES, { label: 'State' }),
@@ -48,12 +49,13 @@ export async function createItem(db, projectId, fields, userId) {
   const state = fields.state ?? 'not_started';
   const { rows } = await db.query(
     `INSERT INTO checklist_items
-       (project_id, title, category, owner_id, state, due_date, evidence_url, notes, position, completed_at, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (project_id, title, stage, category, owner_id, state, due_date, evidence_url, notes, position, completed_at, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       projectId,
       fields.title,
+      fields.stage ?? '',
       fields.category ?? 'other',
       fields.owner_id ?? null,
       state,
@@ -140,7 +142,7 @@ export async function removeDependency(db, itemId, blockerId) {
 export async function createItemsFromTemplate(db, projectId, templateItems, userId) {
   const idByKey = new Map();
   for (const [position, t] of templateItems.entries()) {
-    const item = await createItem(db, projectId, { title: t.title, category: t.category, position }, userId);
+    const item = await createItem(db, projectId, { title: t.title, stage: t.stage, category: t.category, position }, userId);
     idByKey.set(t.key, item.id);
   }
   for (const t of templateItems) {

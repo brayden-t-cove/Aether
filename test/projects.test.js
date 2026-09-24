@@ -73,7 +73,7 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
     let project, items;
 
     it('needs a market for the market launch template', async () => {
-      await editor.agent.post('/api/projects').send({ name: 'No market', template: 'market_launch' }).expect(400);
+      await editor.agent.post('/api/projects').send({ name: 'No market', template: 'international_launch' }).expect(400);
       await editor.agent.post('/api/projects').send({ name: 'Bad template', template: 'nope' }).expect(400);
       await viewer.agent.post('/api/projects').send({ name: 'Viewer' }).expect(403);
     });
@@ -88,7 +88,7 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
           market_id: uk.id,
           owner_id: editor.user.id,
           target_date: '2026-11-30',
-          template: 'market_launch',
+          template: 'international_launch',
         })
         .expect(201);
       project = body.project;
@@ -96,23 +96,46 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
       const res = await viewer.agent.get(`/api/projects/${project.id}`).expect(200);
       items = res.body.items;
       expect(res.body.project).toMatchObject({ product_name: 'Lightbulb Camera', market_code: 'UK', owner_name: 'Intl', target_date: '2026-11-30' });
-      expect(byTitle(items, 'UKCA certification')).toBeTruthy();
+      expect(byTitle(items, 'UKCA certification complete')).toBeTruthy();
       expect(byTitle(items, 'type G plug')).toBeTruthy();
+      expect(byTitle(items, 'type G plug').stage).toBe('Identify the country');
 
-      const cert = byTitle(items, 'UKCA certification');
-      expect(cert.blocked_by.map((b) => b.title)).toEqual([expect.stringContaining('Compliance testing')]);
+      const cert = byTitle(items, 'UKCA certification complete');
+      expect(cert.blocked_by.map((b) => b.title)).toEqual([expect.stringContaining('Engineering or production samples')]);
       expect(cert.waiting).toBe(true);
-      expect(byTitle(items, 'Compliance testing').waiting).toBe(false);
-      expect(res.body.activity[0]).toMatchObject({ action: 'created', changes: { template: 'market_launch', items: items.length } });
+      expect(byTitle(items, 'Engineering or production samples').waiting).toBe(true);
+      expect(byTitle(items, 'Research the marketplaces').waiting).toBe(false);
+      expect(res.body.activity[0]).toMatchObject({ action: 'created', changes: { template: 'international_launch', items: items.length } });
+    });
+
+    it('builds the US launch checklist in stages, defaulting to the US market', async () => {
+      const { body } = await editor.agent.post('/api/projects').send({ name: 'US launch test', template: 'us_launch', product_id: camera.id }).expect(201);
+      const res = await viewer.agent.get(`/api/projects/${body.project.id}`).expect(200);
+      expect(res.body.project).toMatchObject({ market_code: 'US', type: 'new_product' });
+      const stages = [...new Set(res.body.items.map((i) => i.stage))];
+      expect(stages).toEqual([
+        'Validate the product',
+        'Arrangements for making the product',
+        'Sample product provided',
+        'User manual and packaging',
+        'Final sign-off',
+        'Product launch',
+        'Post launch',
+      ]);
+      const certIds = byTitle(res.body.items, 'Certification IDs documented');
+      expect(certIds.blocked_by.map((b) => b.title)).toEqual(expect.arrayContaining(['FCC certification complete']));
+      await admin.agent.delete(`/api/projects/${body.project.id}`).expect(200);
     });
 
     it("won't mark an item done while it waits on something open", async () => {
-      const testing = byTitle(items, 'Compliance testing');
-      const cert = byTitle(items, 'UKCA certification');
+      const reqs = byTitle(items, 'Identify certification requirements');
+      const testing = byTitle(items, 'Engineering or production samples');
+      const cert = byTitle(items, 'UKCA certification complete');
 
       const { body } = await editor.agent.patch(`/api/items/${cert.id}`).send({ state: 'done' }).expect(409);
-      expect(body.error).toContain('Compliance testing');
+      expect(body.error).toContain('Engineering or production samples');
 
+      await editor.agent.patch(`/api/items/${reqs.id}`).send({ state: 'done' }).expect(200);
       const { body: done } = await editor.agent.patch(`/api/items/${testing.id}`).send({ state: 'done' }).expect(200);
       expect(done.item.completed_at).toBeTruthy();
       await editor.agent.patch(`/api/items/${cert.id}`).send({ state: 'done', evidence_url: 'https://example.com/ukca.pdf' }).expect(200);
@@ -122,10 +145,10 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
     });
 
     it('rejects loops of items waiting on each other', async () => {
-      const a = byTitle(items, 'Manual localized');
-      const b = byTitle(items, 'Packaging artwork');
-      const c = byTitle(items, 'Marketplace listing');
-      // Template already has: artwork waits on manual, listing waits on artwork.
+      const a = byTitle(items, 'Identify translation requirements');
+      const b = byTitle(items, 'User manual and packaging reworked');
+      const c = byTitle(items, 'All information checked');
+      // Template already has: rework waits on translations, the check waits on the rework.
       await editor.agent.post(`/api/items/${a.id}/dependencies`).send({ blocked_by_id: b.id }).expect(409);
       await editor.agent.post(`/api/items/${a.id}/dependencies`).send({ blocked_by_id: c.id }).expect(409);
       await editor.agent.post(`/api/items/${a.id}/dependencies`).send({ blocked_by_id: a.id }).expect(400);
@@ -158,14 +181,14 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
     });
 
     it('summarises progress, blockers and overdue items on the dashboard', async () => {
-      const listing = byTitle(items, 'Marketplace listing');
+      const listing = byTitle(items, 'SKU and listings created');
       await editor.agent.patch(`/api/items/${listing.id}`).send({ due_date: '2020-01-01' }).expect(200);
-      const logistics = byTitle(items, 'Importer');
+      const logistics = byTitle(items, 'Warehouse locations');
       await editor.agent.patch(`/api/items/${logistics.id}`).send({ state: 'blocked', notes: 'Waiting on distributor contract' }).expect(200);
 
       const { body } = await viewer.agent.get('/api/dashboard').expect(200);
       const summary = body.projects.find((p) => p.id === project.id);
-      expect(summary).toMatchObject({ item_count: items.length, done_count: 1, overdue_count: 1, blocked_count: 1 });
+      expect(summary).toMatchObject({ item_count: items.length, done_count: 2, overdue_count: 1, blocked_count: 1 });
       expect(summary.waiting_count).toBeGreaterThan(0);
       expect(body.counts).toMatchObject({ open_projects: 2, blocked_items: 1, overdue_items: 1 });
       expect(body.overdue[0]).toMatchObject({ title: listing.title, project_name: project.name });

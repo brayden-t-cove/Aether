@@ -7,8 +7,9 @@ import { useLoad } from '../lib/useLoad.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 
 function suggestName({ product, market, template }) {
-  if (template === 'market_launch' && product && market) return `${product.name} — ${market.code} launch`;
-  if (template === 'new_product' && product) return `${product.name} — new product`;
+  if (!product) return '';
+  if (template === 'us_launch') return `${product.name} — US launch`;
+  if (template === 'international_launch' && market) return `${product.name} — ${market.code} launch`;
   return '';
 }
 
@@ -22,7 +23,7 @@ export default function NewProjectPage() {
   const templates = useLoad('/api/templates');
 
   const [form, setForm] = useState({
-    template: 'market_launch',
+    template: params.get('market') ? 'international_launch' : 'us_launch',
     product_id: params.get('product') || '',
     market_id: params.get('market') || '',
     owner_id: user.id,
@@ -39,6 +40,13 @@ export default function NewProjectPage() {
   const market = markets.data?.markets.find((m) => m.id === form.market_id);
   const template = templates.data?.templates.find((t) => t.key === form.template);
 
+  // A template can come with a market (the US launch is for the US): fill it in if none is picked.
+  useEffect(() => {
+    const code = template?.defaultMarketCode;
+    const m = code && markets.data?.markets.find((x) => x.code === code);
+    if (m) setForm((f) => (f.market_id ? f : { ...f, market_id: m.id }));
+  }, [template, markets.data]);
+
   // Keep the suggested name in step with the choices until the user types their own.
   useEffect(() => {
     if (!nameTouched) setName(suggestName({ product, market, template: form.template }));
@@ -51,6 +59,9 @@ export default function NewProjectPage() {
       if (key === 'template') {
         const t = templates.data?.templates.find((x) => x.key === value);
         if (t) next.type = t.projectType;
+        // Leaving the US launch: drop the US market it filled in, so the next template starts clean.
+        const us = markets.data?.markets.find((x) => x.code === 'US');
+        if (t?.key !== 'us_launch' && f.template === 'us_launch' && f.market_id === us?.id) next.market_id = '';
       }
       return next;
     });
@@ -142,10 +153,15 @@ export default function NewProjectPage() {
               No products yet. <Link to="/products">Add one</Link> first, or create the project without a product.
             </p>
           )}
-          {market && template?.needsMarket && (
+          {market && template && (
             <p className="muted small">
-              Includes certification for {market.required_marks.join(', ') || 'the market'}, a type {market.plug_types.join('/') || '?'} plug adapter and a{' '}
-              {market.languages.join(', ') || 'localized'} manual.
+              The checklist will use {market.name}'s details: {market.required_marks.join(', ') || 'no'} certification
+              {template.needsMarket && (
+                <>
+                  , type {market.plug_types.join('/') || '?'} plug, {market.voltage || 'local voltage'}, and {market.languages.join(', ') || 'local'} translations
+                </>
+              )}
+              .
             </p>
           )}
 

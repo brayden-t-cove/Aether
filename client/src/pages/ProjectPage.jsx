@@ -11,6 +11,25 @@ import ErrorNote from '../components/ErrorNote.jsx';
 import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
 
+/**
+ * Group by stage, in the order stages first appear, when items have stages
+ * (template checklists do). Otherwise group by category.
+ */
+function groupItems(items) {
+  if (items.some((i) => i.stage)) {
+    const order = [...new Set(items.map((i) => i.stage || ''))].sort((a, b) => (a === '') - (b === ''));
+    return order.map((stage, n) => ({
+      key: `stage:${stage}`,
+      label: stage || 'Other items',
+      number: stage ? n + 1 : null,
+      items: items.filter((i) => (i.stage || '') === stage),
+    }));
+  }
+  return Object.keys(ITEM_CATEGORIES)
+    .map((key) => ({ key, label: ITEM_CATEGORIES[key], items: items.filter((i) => i.category === key) }))
+    .filter((g) => g.items.length);
+}
+
 function ProjectDetailsForm({ project, users, onSaved, onCancel }) {
   const [form, setForm] = useState({
     name: project.name,
@@ -80,16 +99,17 @@ function ProjectDetailsForm({ project, users, onSaved, onCancel }) {
   );
 }
 
-function AddItemForm({ projectId, onAdded }) {
+function AddItemForm({ projectId, stages, onAdded }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('other');
+  const [stage, setStage] = useState('');
   const [error, setError] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
     try {
-      await api(`/api/projects/${projectId}/items`, { method: 'POST', body: { title, category } });
+      await api(`/api/projects/${projectId}/items`, { method: 'POST', body: { title, category, stage } });
       setTitle('');
       onAdded();
     } catch (err) {
@@ -101,6 +121,16 @@ function AddItemForm({ projectId, onAdded }) {
     <form className="add-item" onSubmit={handleSubmit}>
       <ErrorNote error={error} />
       <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add a checklist item…" aria-label="New item title" />
+      {stages.length > 0 && (
+        <select value={stage} onChange={(e) => setStage(e.target.value)} aria-label="New item stage">
+          <option value="">No stage</option>
+          {stages.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      )}
       <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="New item category">
         {Object.entries(ITEM_CATEGORIES).map(([k, v]) => (
           <option key={k} value={k}>
@@ -128,9 +158,8 @@ export default function ProjectPage() {
   const { project, items, activity } = data;
   const editable = can('editor');
   const late = project.state !== 'done' && project.target_date && project.target_date < today();
-  const groups = Object.keys(ITEM_CATEGORIES)
-    .map((key) => ({ key, label: ITEM_CATEGORIES[key], items: items.filter((i) => i.category === key) }))
-    .filter((g) => g.items.length);
+  const groups = groupItems(items);
+  const stages = [...new Set(items.map((i) => i.stage).filter(Boolean))];
 
   async function setState(state) {
     setActionError(null);
@@ -247,6 +276,7 @@ export default function ProjectPage() {
         {groups.map((g) => (
           <div key={g.key} className="item-group">
             <h3 className="group-title">
+              {g.number && <span className="stage-number">{g.number}</span>}
               {g.label} <span className="muted small">{g.items.filter((i) => i.state === 'done').length}/{g.items.length}</span>
             </h3>
             <ul className="items">
@@ -257,6 +287,7 @@ export default function ProjectPage() {
                   projectId={project.id}
                   allItems={items}
                   users={users.data.users}
+                  stages={stages}
                   editable={editable}
                   onChange={reload}
                 />
@@ -264,7 +295,7 @@ export default function ProjectPage() {
             </ul>
           </div>
         ))}
-        {editable && <AddItemForm projectId={project.id} onAdded={reload} />}
+        {editable && <AddItemForm projectId={project.id} stages={stages} onAdded={reload} />}
       </section>
 
       <section className="card">

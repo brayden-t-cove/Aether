@@ -101,6 +101,12 @@ export function projectRoutes({ db }) {
       const template = templateKey ? getTemplate(templateKey) : null;
       if (templateKey && !template) throw new HttpError(400, 'Unknown checklist template');
 
+      if (template && !fields.type) fields.type = template.projectType;
+      // A template can default the market (the US launch checklist is for the US).
+      if (!fields.market_id && template?.defaultMarketCode) {
+        const { rows } = await db.query('SELECT id FROM markets WHERE code = $1', [template.defaultMarketCode]);
+        fields.market_id = rows[0]?.id ?? null;
+      }
       const market = fields.market_id ? await getMarket(db, fields.market_id) : null;
       if (fields.market_id && !market) throw new HttpError(400, 'Market not found');
       if (template?.needsMarket && !market) throw new HttpError(400, `The ${template.label} checklist needs a market`);

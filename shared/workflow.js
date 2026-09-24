@@ -27,7 +27,10 @@ export const ITEM_CATEGORIES = {
   testing: 'Testing',
   manual: 'Manual',
   packaging: 'Packaging',
+  design: 'Design',
   listing: 'Listing',
+  marketing: 'Marketing',
+  business: 'Business',
   other: 'Other',
 };
 

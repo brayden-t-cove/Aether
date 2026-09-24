@@ -8,6 +8,7 @@ import StateBadge from './StateBadge.jsx';
 
 const toForm = (item) => ({
   title: item.title,
+  stage: item.stage || '',
   category: item.category,
   owner_id: item.owner_id || '',
   due_date: item.due_date || '',
@@ -26,7 +27,7 @@ function BlockerLink({ blocker, projectId }) {
 }
 
 /** One checklist row. Expands into an editor for editors. `onChange` reloads the project. */
-export default function ChecklistItem({ item, projectId, allItems, users, editable, onChange }) {
+export default function ChecklistItem({ item, projectId, allItems, users, stages = [], editable, onChange }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(() => toForm(item));
   const [error, setError] = useState(null);
@@ -110,9 +111,14 @@ export default function ChecklistItem({ item, projectId, allItems, users, editab
       {openBlockers.length > 0 && item.state !== 'done' && (
         <div className="item-waiting">
           <span className="muted small">Waiting on</span>
-          {openBlockers.map((b) => (
+          {openBlockers.slice(0, 2).map((b) => (
             <BlockerLink key={b.id} blocker={b} projectId={projectId} />
           ))}
+          {openBlockers.length > 2 && (
+            <button className="link-btn small" onClick={() => setOpen(true)}>
+              +{openBlockers.length - 2} more
+            </button>
+          )}
         </div>
       )}
       <ErrorNote error={!open && error} />
@@ -127,6 +133,15 @@ export default function ChecklistItem({ item, projectId, allItems, users, editab
                 <input required value={form.title} onChange={set('title')} />
               </label>
               <div className="form-row">
+                <label>
+                  Stage
+                  <input list={`stages-${item.id}`} value={form.stage} onChange={set('stage')} placeholder="No stage" />
+                  <datalist id={`stages-${item.id}`}>
+                    {stages.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </label>
                 <label>
                   Category
                   <select value={form.category} onChange={set('category')}>
