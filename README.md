@@ -4,7 +4,18 @@ Luna's product-readiness hub: one place to see where every product stands on its
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and the phase plan.
 
-**Status:** Phase 0 (foundation). Users can sign in with Google or email and see the app shell. The module pages are placeholders until their phase is built.
+**Status:** Phase 1 (products, markets and launch tracking). Products, markets, projects with checklists and blockers, and the boss dashboard are built. Modules for later phases show placeholder pages.
+
+## How launch tracking works
+
+- **Products** are Luna's catalog, marked Upcoming, Active or Sunset.
+- **Markets** hold each country's plug types, voltage, required marks and languages. US, CA, UK, EU and AU are set up at first.
+- **Projects** tie a product to a market (for a launch) with an owner, a target date and a state.
+- **Checklist items** belong to a project, each with a category, owner, due date, state, evidence link and notes.
+- **Waits on:** an item can wait on other items, even in another project. An item can't be marked Done while something it waits on is still open, and loops are refused.
+- **Blocked vs waiting:** *Blocked* means someone marked the item Blocked (an outside problem). *Waiting* means it is waiting on an earlier step, which is normal. The dashboard counts only Blocked items, and shows how many other items each one holds up.
+- **Starting checklists** (`server/lib/templates.js`): *Market launch* builds items from the market's details, e.g. a UK launch gets a UKCA certification item and a type G plug item, with blockers already linked. *New product* covers spec through listing.
+- **States** are shared by projects and items: Not started, In progress, Blocked, In review, Done.
 
 ## Stack
 

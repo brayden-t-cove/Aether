@@ -1,22 +1,25 @@
 /**
  * Aether's modules and the roadmap phase each one ships in.
- * Drives the sidebar and the placeholder pages until each module is built.
+ * Drives the sidebar. Modules without `built: true` show a placeholder page.
  */
 export const MODULES = [
   {
     path: '/projects',
+    built: true,
     label: 'Projects',
     phase: 1,
     summary: 'Launch and new-product projects, each with a checklist of items, owners, states and blockers.',
   },
   {
     path: '/products',
+    built: true,
     label: 'Products',
     phase: 1,
     summary: 'The product catalog: Luna products plus products synced from Odyssey, with variants per market.',
   },
   {
     path: '/markets',
+    built: true,
     label: 'Markets',
     phase: 1,
     summary: 'Countries and regions with plug type, voltage, required marks and languages.',

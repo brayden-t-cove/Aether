@@ -12,6 +12,12 @@ export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, 
 export function errorHandler(err, req, res, _next) {
   // Postgres unique violation → 409, so callers get a useful message.
   if (err.code === '23505') return res.status(409).json({ error: 'That record already exists' });
+  // Foreign key: deleting something still in use, or pointing at a record that doesn't exist.
+  if (err.code === '23503') {
+    return /still referenced/.test(err.detail || '')
+      ? res.status(409).json({ error: 'This record is still in use by other records' })
+      : res.status(400).json({ error: 'A linked record was not found' });
+  }
   // Invalid UUID or other malformed input in a URL parameter.
   if (err.code === '22P02') return res.status(404).json({ error: 'Not found' });
   const status = err.status || err.statusCode || 500;

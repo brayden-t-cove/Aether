@@ -32,7 +32,7 @@ function validateFields(body, { creating }) {
     out.role = body.role;
   }
   if ('team' in body) {
-    if (body.team !== null && !(body.team in TEAMS)) throw new HttpError(400, 'Unknown team');
+    if (body.team !== null && !Object.hasOwn(TEAMS, body.team)) throw new HttpError(400, 'Unknown team');
     out.team = body.team;
   }
   if ('active' in body) {

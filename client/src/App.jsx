@@ -5,6 +5,13 @@ import Layout from './components/Layout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ModulePlaceholder from './pages/ModulePlaceholder.jsx';
+import ProductsPage from './pages/ProductsPage.jsx';
+import ProductDetailPage from './pages/ProductDetailPage.jsx';
+import MarketsPage from './pages/MarketsPage.jsx';
+import MarketDetailPage from './pages/MarketDetailPage.jsx';
+import ProjectsPage from './pages/ProjectsPage.jsx';
+import NewProjectPage from './pages/NewProjectPage.jsx';
+import ProjectPage from './pages/ProjectPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
@@ -36,7 +43,21 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
-        {MODULES.map((m) => (
+        <Route path="/products" element={<ProductsPage />} />
+        <Route path="/products/:id" element={<ProductDetailPage />} />
+        <Route path="/markets" element={<MarketsPage />} />
+        <Route path="/markets/:id" element={<MarketDetailPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route
+          path="/projects/new"
+          element={
+            <RequireRole role="editor">
+              <NewProjectPage />
+            </RequireRole>
+          }
+        />
+        <Route path="/projects/:id" element={<ProjectPage />} />
+        {MODULES.filter((m) => !m.built).map((m) => (
           <Route key={m.path} path={m.path} element={<ModulePlaceholder module={m} />} />
         ))}
         <Route path="/settings" element={<SettingsPage />} />

@@ -42,7 +42,7 @@ export default function Layout() {
           {MODULES.map((m) => (
             <NavLink key={m.path} to={m.path}>
               {m.label}
-              <span className="nav-phase">P{m.phase}</span>
+              {!m.built && <span className="nav-phase" title={`Coming in phase ${m.phase}`}>P{m.phase}</span>}
             </NavLink>
           ))}
           {can('admin') && (

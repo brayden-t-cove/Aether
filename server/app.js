@@ -9,6 +9,10 @@ import { errorHandler } from './lib/http.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { activityRoutes } from './routes/activity.js';
+import { productRoutes } from './routes/products.js';
+import { marketRoutes } from './routes/markets.js';
+import { projectRoutes } from './routes/projects.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLIENT_DIST = join(ROOT, 'client', 'dist');
@@ -66,6 +70,10 @@ export function createApp({ db, config }) {
   app.use(authRoutes({ db, config, passport }));
   app.use(userRoutes({ db }));
   app.use(activityRoutes({ db }));
+  app.use(productRoutes({ db }));
+  app.use(marketRoutes({ db }));
+  app.use(projectRoutes({ db }));
+  app.use(dashboardRoutes({ db }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 
