@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createUser, resolveGoogleUser } from '../server/lib/users.js';
+import { bootstrapAdmin, createUser, findUserByEmail, resolveGoogleUser } from '../server/lib/users.js';
 import { makeApp, PASSWORD, setupDb, signedInAgent, testConfig, TEST_DATABASE_URL } from './helpers.js';
 
 describe.skipIf(!TEST_DATABASE_URL)('auth', () => {
@@ -50,6 +50,26 @@ describe.skipIf(!TEST_DATABASE_URL)('auth', () => {
     await agent.post('/api/me/password').send({ currentPassword: PASSWORD, newPassword: 'short' }).expect(400);
     await agent.post('/api/me/password').send({ currentPassword: PASSWORD, newPassword: 'a brand new password' }).expect(200);
     await request(app).post('/auth/local').send({ email: 'cal@lunahome.com', password: 'a brand new password' }).expect(200);
+  });
+
+  describe('bootstrap admin password', () => {
+    it('creates the admin with a password, or promotes and resets an existing user', async () => {
+      expect(await bootstrapAdmin(db, { email: 'first@lunahome.com', password: 'short' })).toBe('password_too_short');
+      expect(await findUserByEmail(db, 'first@lunahome.com')).toBeNull();
+
+      expect(await bootstrapAdmin(db, { email: 'First@lunahome.com', password: 'bootstrap password' })).toBe('ok');
+      await request(app).post('/auth/local').send({ email: 'first@lunahome.com', password: 'bootstrap password' }).expect(200);
+
+      await db.query(`UPDATE users SET role = 'viewer', active = false WHERE email = 'first@lunahome.com'`);
+      expect(await bootstrapAdmin(db, { email: 'first@lunahome.com', password: 'another password' })).toBe('ok');
+      const user = await findUserByEmail(db, 'first@lunahome.com');
+      expect(user).toMatchObject({ role: 'admin', active: true });
+      await request(app).post('/auth/local').send({ email: 'first@lunahome.com', password: 'another password' }).expect(200);
+    });
+
+    it('does nothing without both email and password', async () => {
+      expect(await bootstrapAdmin(db, { email: '', password: 'bootstrap password' })).toBe('skipped');
+    });
   });
 
   describe('Google sign-in', () => {

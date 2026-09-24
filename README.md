@@ -85,7 +85,7 @@ Each user also has an optional **team** (Leadership, Product Development, Intern
 
 Deactivated users are signed out on their next request. Users are never hard-deleted, so the activity log stays intact.
 
-**First admin:** set `ADMIN_EMAIL` to your Google address. Signing in with it always grants admin, even on an empty database. Or run `npm run user:create` against the production database.
+**First admin:** set `ADMIN_EMAIL` to your Google address. Signing in with it always grants admin, even on an empty database. To sign in with email before Google is set up, also set `ADMIN_PASSWORD` (10+ characters): on startup the app sets that password on the `ADMIN_EMAIL` account. Remove `ADMIN_PASSWORD` once you're in, or it resets the password on every restart. You can also run `npm run user:create` against the production database.
 
 ## Activity log
 

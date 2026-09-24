@@ -112,3 +112,22 @@ export async function resolveGoogleUser(db, { email, name, avatarUrl, googleId }
   );
   return rows[0];
 }
+
+/**
+ * Make sure the bootstrap admin (ADMIN_EMAIL + ADMIN_PASSWORD) exists, is an
+ * active admin and has that password. Returns a short status for logging.
+ */
+export async function bootstrapAdmin(db, { email, password }) {
+  email = normalizeEmail(email);
+  if (!email || !password) return 'skipped';
+  if (password.length < MIN_PASSWORD_LENGTH) return 'password_too_short';
+
+  let user = await findUserByEmail(db, email);
+  if (user) {
+    user = await updateUser(db, user.id, { role: 'admin', active: true });
+  } else {
+    user = await createUser(db, { email, role: 'admin' });
+  }
+  await setPassword(db, user.id, password);
+  return 'ok';
+}

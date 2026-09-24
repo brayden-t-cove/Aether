@@ -23,6 +23,10 @@ export const config = {
   // Signing in with this email always grants admin, even without an invite.
   // Used to bootstrap the first admin on a fresh database.
   adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  // Optional: on startup, sets this password on the ADMIN_EMAIL account
+  // (creating it if needed) so the first admin can sign in without Google.
+  // Remove it once you're in, or it will reset the password on every restart.
+  adminPassword: process.env.ADMIN_PASSWORD || '',
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,

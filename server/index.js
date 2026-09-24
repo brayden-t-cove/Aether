@@ -2,11 +2,23 @@ import { config, assertConfig } from './config.js';
 import { createPool } from './db/pool.js';
 import { migrate } from './db/migrate.js';
 import { createApp } from './app.js';
+import { bootstrapAdmin, MIN_PASSWORD_LENGTH } from './lib/users.js';
 
 assertConfig();
 
 const db = createPool({ connectionString: config.databaseUrl, ssl: config.databaseSsl });
 await migrate(db);
+
+if (config.adminPassword) {
+  const result = await bootstrapAdmin(db, { email: config.adminEmail, password: config.adminPassword });
+  if (result === 'ok') {
+    console.log(`[aether] password set for admin ${config.adminEmail}. Remove ADMIN_PASSWORD once you have signed in.`);
+  } else if (result === 'password_too_short') {
+    console.error(`[aether] ADMIN_PASSWORD ignored: it must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  } else {
+    console.error('[aether] ADMIN_PASSWORD ignored: ADMIN_EMAIL is not set.');
+  }
+}
 
 const app = createApp({ db, config });
 const server = app.listen(config.port, () => {
