@@ -76,6 +76,16 @@ export const v = {
       return items;
     },
 
+  idList:
+    ({ label, max = 50 } = {}) =>
+    (value) => {
+      if (value === null || value === undefined) return [];
+      if (!Array.isArray(value) || value.some((x) => typeof x !== 'string' || !UUID_RE.test(x))) fail(label, 'must be a list of IDs');
+      const ids = [...new Set(value)];
+      if (ids.length > max) fail(label, `can have at most ${max} entries`);
+      return ids;
+    },
+
   url:
     ({ label } = {}) =>
     (value) => {

@@ -18,7 +18,7 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
   describe('markets', () => {
     it('comes with a starting set of markets', async () => {
       const { body } = await viewer.agent.get('/api/markets').expect(200);
-      expect(body.markets.map((m) => m.code)).toEqual(['AU', 'CA', 'EU', 'UK', 'US']);
+      expect(body.markets.map((m) => m.code)).toEqual(['AU', 'CA', 'EU', 'MX', 'UK', 'US', 'ZA']);
       uk = body.markets.find((m) => m.code === 'UK');
       expect(uk).toMatchObject({ plug_types: ['G'], required_marks: ['UKCA'], voltage: '230V' });
     });
@@ -27,12 +27,12 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
       await viewer.agent.post('/api/markets').send({ code: 'mx', name: 'Mexico' }).expect(403);
       const { body } = await editor.agent
         .post('/api/markets')
-        .send({ code: 'mx', name: 'Mexico', plug_types: 'A; B', required_marks: ['NOM'] })
+        .send({ code: 'nz', name: 'New Zealand', plug_types: 'I; A', required_marks: ['RCM'] })
         .expect(201);
-      expect(body.market).toMatchObject({ code: 'MX', plug_types: ['A', 'B'], required_marks: ['NOM'] });
-      await editor.agent.post('/api/markets').send({ code: 'MX', name: 'Dup' }).expect(409);
-      const { body: updated } = await editor.agent.patch(`/api/markets/${body.market.id}`).send({ languages: ['Spanish'] }).expect(200);
-      expect(updated.market.languages).toEqual(['Spanish']);
+      expect(body.market).toMatchObject({ code: 'NZ', plug_types: ['I', 'A'], required_marks: ['RCM'] });
+      await editor.agent.post('/api/markets').send({ code: 'NZ', name: 'Dup' }).expect(409);
+      const { body: updated } = await editor.agent.patch(`/api/markets/${body.market.id}`).send({ languages: ['English', 'Māori'] }).expect(200);
+      expect(updated.market.languages).toEqual(['English', 'Māori']);
     });
   });
 

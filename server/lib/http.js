@@ -18,6 +18,8 @@ export function errorHandler(err, req, res, _next) {
       ? res.status(409).json({ error: 'This record is still in use by other records' })
       : res.status(400).json({ error: 'A linked record was not found' });
   }
+  // A CHECK constraint caught a value the validators let through.
+  if (err.code === '23514') return res.status(400).json({ error: 'That value is not allowed here' });
   // Invalid UUID or other malformed input in a URL parameter.
   if (err.code === '22P02') return res.status(404).json({ error: 'Not found' });
   const status = err.status || err.statusCode || 500;

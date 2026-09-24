@@ -48,6 +48,7 @@ export default function ProductDetailPage() {
           <h1>{product.name}</h1>
           <p className="muted">
             <span className={`tag lifecycle-${product.lifecycle}`}>{LIFECYCLES[product.lifecycle]}</span>
+            {product.model && <> · {product.model}</>}
             {product.sku && <> · {product.sku}</>}
             {product.category && <> · {product.category}</>}
           </p>
@@ -73,12 +74,42 @@ export default function ProductDetailPage() {
       ) : (
         <div className="card">
           <dl className="details">
+            <dt>Model</dt>
+            <dd>{product.model || '—'}</dd>
+            <dt>Manufacturer</dt>
+            <dd>{product.manufacturer || '—'}</dd>
+            <dt>{product.lifecycle === 'upcoming' ? 'Planned markets' : 'Markets'}</dt>
+            <dd>
+              {product.market_codes.length
+                ? product.market_ids.map((id, i) => (
+                    <span key={id}>
+                      {i > 0 && ', '}
+                      <Link to={`/markets/${id}`}>{product.market_codes[i]}</Link>
+                    </span>
+                  ))
+                : '—'}
+            </dd>
+            <dt>{product.lifecycle === 'upcoming' ? 'Planned channels' : 'Channels'}</dt>
+            <dd>{joinList(product.channels)}</dd>
+            <dt>Replaces</dt>
+            <dd>{product.replaces_id ? <Link to={`/products/${product.replaces_id}`}>{product.replaces_name}{product.replaces_model ? ` (${product.replaces_model})` : ''}</Link> : '—'}</dd>
+            {product.replaced_by?.length > 0 && (
+              <>
+                <dt>Replaced by</dt>
+                <dd>
+                  {product.replaced_by.map((r, i) => (
+                    <span key={r.id}>
+                      {i > 0 && ', '}
+                      <Link to={`/products/${r.id}`}>{r.name}{r.model ? ` (${r.model})` : ''}</Link>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            )}
             <dt>Launch date</dt>
             <dd>{formatDate(product.launch_date) || '—'}</dd>
-            <dt>Sunset date</dt>
+            <dt>Discontinued date</dt>
             <dd>{formatDate(product.sunset_date) || '—'}</dd>
-            <dt>Channels</dt>
-            <dd>{joinList(product.channels)}</dd>
             <dt>Source</dt>
             <dd>{product.source === 'odyssey' ? 'Synced from Odyssey (edit it there)' : 'Aether'}</dd>
             {product.notes && (

@@ -917,6 +917,53 @@ label.inline {
   width: 100%;
 }
 
+.checks {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+.checks legend {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 400;
+}
+label.check input {
+  accent-color: var(--accent);
+}
+.file-btn {
+  align-self: flex-start;
+}
+.action-create {
+  border-color: var(--status-good);
+}
+.action-update {
+  border-color: var(--status-active);
+}
+.action-skip {
+  color: var(--text-muted);
+}
+.action-error {
+  border-color: var(--status-critical);
+}
+.error-text {
+  color: var(--danger);
+}
+.warning-text {
+  color: var(--text-muted);
+}
+.success-card {
+  border-color: var(--status-good);
+}
+
 /* ── New project ───────────────────────────────────────────────────────── */
 
 .choice-group {

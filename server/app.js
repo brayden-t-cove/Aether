@@ -13,6 +13,7 @@ import { productRoutes } from './routes/products.js';
 import { marketRoutes } from './routes/markets.js';
 import { projectRoutes } from './routes/projects.js';
 import { dashboardRoutes } from './routes/dashboard.js';
+import { importRoutes } from './routes/import.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLIENT_DIST = join(ROOT, 'client', 'dist');
@@ -48,7 +49,7 @@ export function createApp({ db, config }) {
     }
   });
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '2mb' }));
   app.use(
     session({
       name: 'aether.sid',
@@ -74,6 +75,7 @@ export function createApp({ db, config }) {
   app.use(marketRoutes({ db }));
   app.use(projectRoutes({ db }));
   app.use(dashboardRoutes({ db }));
+  app.use(importRoutes({ db }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 

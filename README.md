@@ -17,6 +17,16 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and th
 - **Starting checklists** (`server/lib/templates.js`): *Market launch* builds items from the market's details, e.g. a UK launch gets a UKCA certification item and a type G plug item, with blockers already linked. *New product* covers spec through listing.
 - **States** are shared by projects and items: Not started, In progress, Blocked, In review, Done.
 
+## Importing
+
+Admins can bulk-load data under **Admin → Import**. Every import shows a preview first, and nothing is saved until you click Import.
+
+- **Paste from a spreadsheet** (header row included) or upload a `.csv`/`.tsv`. Recognized columns: Name, Model (or Odyssey Name), SKU, Category, Manufacturer, Lifecycle, Launch Date, Sunset Date, Markets, Channels, Replaces, Notes. `--` or blank means unknown. Lifecycle accepts the team's words (Active, Development, Discontinued…), and markets accept names or codes (Mex, South Africa, UK…).
+- **Upload a `.json` file** with `products` (the same columns) and `projects` (name, type, product model or name, market code, owner email, state, target date, description, and `items` with title, category, state, owner, due date, notes and `waits_on` titles).
+- Products are matched to existing ones by model, then SKU, then name, and updated instead of duplicated. Projects whose name already exists are skipped, so running the same file twice is safe.
+
+Don't commit import files with real business data: this repository is public.
+
 ## Stack
 
 | Layer | Choice |

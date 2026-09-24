@@ -31,8 +31,9 @@ export const ITEM_CATEGORIES = {
   other: 'Other',
 };
 
+/** Keys are stored; labels use the team's own words. */
 export const LIFECYCLES = {
-  upcoming: 'Upcoming',
+  upcoming: 'In development',
   active: 'Active',
-  sunset: 'Sunset',
+  sunset: 'Discontinued',
 };

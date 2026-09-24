@@ -3,7 +3,7 @@ import { LIFECYCLES } from '../../shared/workflow.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
-import { diff } from '../lib/db.js';
+import { diff, withTransaction } from '../lib/db.js';
 import { parse } from '../lib/validate.js';
 import { listProjects } from '../lib/projects.js';
 import {
@@ -12,6 +12,8 @@ import {
   getProduct,
   listProducts,
   PRODUCT_FIELDS,
+  PRODUCT_MARKETS_FIELD,
+  setProductMarkets,
   updateProduct,
 } from '../lib/products.js';
 
@@ -52,15 +54,20 @@ export function productRoutes({ db }) {
     requireRole('editor'),
     asyncHandler(async (req, res) => {
       const fields = parse(req.body, PRODUCT_FIELDS, { required: ['name'] });
-      const product = await createProduct(db, fields, req.user.id);
-      await logActivity(db, {
-        entityType: 'product',
-        entityId: product.id,
-        action: 'created',
-        changes: { label: product.name, lifecycle: product.lifecycle },
-        userId: req.user.id,
+      const { market_ids } = parse(req.body, PRODUCT_MARKETS_FIELD);
+      const id = await withTransaction(db, async (tx) => {
+        const created = await createProduct(tx, fields, req.user.id);
+        const markets = market_ids ? await setProductMarkets(tx, created.id, market_ids) : [];
+        await logActivity(tx, {
+          entityType: 'product',
+          entityId: created.id,
+          action: 'created',
+          changes: { label: created.name, lifecycle: created.lifecycle, markets },
+          userId: req.user.id,
+        });
+        return created.id;
       });
-      res.status(201).json({ product });
+      res.status(201).json({ product: await getProduct(db, id) });
     }),
   );
 
@@ -71,18 +78,29 @@ export function productRoutes({ db }) {
       const before = await loadProduct(db, req.params.id);
       assertEditable(before);
       const fields = parse(req.body, PRODUCT_FIELDS);
-      const product = await updateProduct(db, before.id, fields);
-      const changes = diff(before, fields, Object.keys(fields));
-      if (Object.keys(changes).length) {
-        await logActivity(db, {
-          entityType: 'product',
-          entityId: product.id,
-          action: 'updated',
-          changes: { ...changes, label: product.name },
-          userId: req.user.id,
-        });
-      }
-      res.json({ product });
+      const { market_ids } = parse(req.body, PRODUCT_MARKETS_FIELD);
+      if (fields.replaces_id && fields.replaces_id === before.id) throw new HttpError(400, "A product can't replace itself");
+
+      await withTransaction(db, async (tx) => {
+        await updateProduct(tx, before.id, fields);
+        const changes = diff(before, fields, Object.keys(fields));
+        if (market_ids) {
+          const markets = await setProductMarkets(tx, before.id, market_ids);
+          if (JSON.stringify(markets) !== JSON.stringify(before.market_codes)) {
+            changes.markets = { from: before.market_codes, to: markets };
+          }
+        }
+        if (Object.keys(changes).length) {
+          await logActivity(tx, {
+            entityType: 'product',
+            entityId: before.id,
+            action: 'updated',
+            changes: { ...changes, label: fields.name ?? before.name },
+            userId: req.user.id,
+          });
+        }
+      });
+      res.json({ product: await getProduct(db, before.id) });
     }),
   );
 

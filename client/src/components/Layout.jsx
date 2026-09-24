@@ -49,6 +49,7 @@ export default function Layout() {
             <>
               <div className="nav-section">Admin</div>
               <NavLink to="/admin/users">Users</NavLink>
+              <NavLink to="/admin/import">Import</NavLink>
             </>
           )}
         </nav>

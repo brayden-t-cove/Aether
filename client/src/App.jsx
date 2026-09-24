@@ -13,6 +13,7 @@ import ProjectsPage from './pages/ProjectsPage.jsx';
 import NewProjectPage from './pages/NewProjectPage.jsx';
 import ProjectPage from './pages/ProjectPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
+import ImportPage from './pages/ImportPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -66,6 +67,14 @@ export default function App() {
           element={
             <RequireRole role="admin">
               <UsersPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/admin/import"
+          element={
+            <RequireRole role="admin">
+              <ImportPage />
             </RequireRole>
           }
         />

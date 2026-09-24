@@ -21,7 +21,7 @@ export default function ProductsPage() {
 
   const needle = q.trim().toLowerCase();
   const products = (data?.products || []).filter(
-    (p) => !needle || [p.name, p.sku, p.category].some((v) => v?.toLowerCase().includes(needle)),
+    (p) => !needle || [p.name, p.model, p.sku, p.category, p.manufacturer].some((v) => v?.toLowerCase().includes(needle)),
   );
 
   async function create(payload) {
@@ -64,7 +64,7 @@ export default function ProductsPage() {
             </button>
           ))}
         </div>
-        <input type="search" placeholder="Search name, SKU or category" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" placeholder="Search name, model, SKU or category" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <div className="card flush">
@@ -81,6 +81,7 @@ export default function ProductsPage() {
                   <th>Product</th>
                   <th>Category</th>
                   <th>Lifecycle</th>
+                  <th>Markets</th>
                   <th>Channels</th>
                   <th className="num">Open projects</th>
                 </tr>
@@ -92,13 +93,18 @@ export default function ProductsPage() {
                       <Link to={`/products/${p.id}`}>
                         <strong>{p.name}</strong>
                       </Link>
-                      {p.sku && <div className="muted small">{p.sku}</div>}
+                      <div className="muted small">{[p.model, p.sku].filter(Boolean).join(' · ')}</div>
+                      {p.replaces_name && <div className="muted small">Replaces {p.replaces_model || p.replaces_name}</div>}
                     </td>
                     <td>{p.category || '—'}</td>
                     <td>
                       <span className={`tag lifecycle-${p.lifecycle}`}>{LIFECYCLES[p.lifecycle]}</span>
                     </td>
-                    <td className="small">{joinList(p.channels)}</td>
+                    <td className="small">{joinList(p.market_codes)}</td>
+                    <td className="small">
+                      {joinList(p.channels)}
+                      {p.lifecycle === 'upcoming' && p.channels.length > 0 && <span className="muted"> (planned)</span>}
+                    </td>
                     <td className="num">{p.open_project_count || '—'}</td>
                   </tr>
                 ))}
