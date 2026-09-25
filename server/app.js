@@ -24,6 +24,9 @@ import { createFileStore } from './lib/files.js';
 import { createOdysseyClient } from './lib/odyssey.js';
 import { vendorRoutes } from './routes/vendors.js';
 import { odysseyRoutes } from './routes/odyssey.js';
+import { listingRoutes } from './routes/listings.js';
+import { returnRoutes } from './routes/returns.js';
+import { comparisonRoutes } from './routes/comparisons.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLIENT_DIST = join(ROOT, 'client', 'dist');
@@ -60,7 +63,7 @@ export function createApp({ db, config, odyssey = createOdysseyClient(config.ody
     }
   });
 
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(
     session({
       name: 'aether.sid',
@@ -95,6 +98,9 @@ export function createApp({ db, config, odyssey = createOdysseyClient(config.ody
   app.use(readinessRoutes({ db }));
   app.use(vendorRoutes({ db }));
   app.use(odysseyRoutes({ db, odyssey }));
+  app.use(listingRoutes({ db }));
+  app.use(returnRoutes({ db }));
+  app.use(comparisonRoutes({ db }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 

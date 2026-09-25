@@ -105,3 +105,52 @@ export const VENDOR_STATUSES = {
   active: 'Active',
   inactive: 'Inactive',
 };
+
+// ── Phase 4 ────────────────────────────────────────────────────────────────
+
+export const CHANNELS = {
+  amazon: 'Amazon',
+  tiktok: 'TikTok',
+  walmart: 'Walmart',
+  website: 'Website',
+  other: 'Other',
+};
+
+export const LISTING_STATES = {
+  planned: 'Planned',
+  draft: 'Draft',
+  in_review: 'In review',
+  live: 'Live',
+  paused: 'Paused',
+  removed: 'Removed',
+};
+
+/** Broad reasons, so defects stand out from buyer's remorse and shipping damage. */
+export const REASON_GROUPS = {
+  defect: 'Defect or quality',
+  not_as_described: 'Not as described',
+  changed_mind: 'Changed mind',
+  shipping: 'Shipping or damage',
+  other: 'Other',
+};
+
+/** Amazon customer-return reason codes → readable label and group. */
+export const AMAZON_REASONS = {
+  DEFECTIVE: ['Defective / does not work', 'defect'],
+  QUALITY_UNACCEPTABLE: ['Quality not acceptable', 'defect'],
+  MISSING_PARTS: ['Missing parts', 'defect'],
+  NOT_AS_DESCRIBED: ['Not as described', 'not_as_described'],
+  NOT_COMPATIBLE: ['Not compatible', 'not_as_described'],
+  PART_NOT_COMPATIBLE: ['Part not compatible', 'not_as_described'],
+  UNWANTED_ITEM: ['No longer needed', 'changed_mind'],
+  FOUND_BETTER_PRICE: ['Found a better price', 'changed_mind'],
+  ORDERED_WRONG_ITEM: ['Ordered the wrong item', 'changed_mind'],
+  UNAUTHORIZED_PURCHASE: ['Unauthorized purchase', 'changed_mind'],
+  NO_REASON_GIVEN: ['No reason given', 'changed_mind'],
+  DAMAGED_BY_CARRIER: ['Damaged in shipping', 'shipping'],
+  DAMAGED_BY_FC: ['Damaged at the warehouse', 'shipping'],
+  MISSED_ESTIMATED_DELIVERY: ['Arrived too late', 'shipping'],
+  NEVER_ARRIVED: ['Never arrived', 'shipping'],
+  EXTRA_ITEM: ['Extra item received', 'shipping'],
+  SWITCHEROO: ['Different item returned', 'other'],
+};

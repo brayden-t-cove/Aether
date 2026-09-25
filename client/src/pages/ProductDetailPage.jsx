@@ -11,6 +11,7 @@ import ProjectTable from '../components/ProjectTable.jsx';
 import ProductPhase2 from '../components/ProductPhase2.jsx';
 import OdysseyBadge from '../components/OdysseyBadge.jsx';
 import TestSessions from '../components/TestSessions.jsx';
+import ProductListings from '../components/ProductListings.jsx';
 import { VENDOR_TYPES } from '../../../shared/workflow.js';
 
 export default function ProductDetailPage() {
@@ -175,6 +176,7 @@ export default function ProductDetailPage() {
       </section>
 
       <ProductPhase2 key={product.updated_at} product={product} editable={editable} />
+      <ProductListings productId={product.id} editable={editable} />
       <TestSessions productId={product.id} />
 
       {can('admin') && (

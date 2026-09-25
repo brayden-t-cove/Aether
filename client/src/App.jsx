@@ -23,6 +23,10 @@ import DesignRequestsPage from './pages/DesignRequestsPage.jsx';
 import DesignRequestPage from './pages/DesignRequestPage.jsx';
 import VendorsPage from './pages/VendorsPage.jsx';
 import VendorPage from './pages/VendorPage.jsx';
+import ReturnsPage from './pages/ReturnsPage.jsx';
+import ReturnsImportPage from './pages/ReturnsImportPage.jsx';
+import ComparisonsPage from './pages/ComparisonsPage.jsx';
+import ComparisonPage from './pages/ComparisonPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -76,6 +80,17 @@ export default function App() {
         <Route path="/design-requests/:id" element={<DesignRequestPage />} />
         <Route path="/vendors" element={<VendorsPage />} />
         <Route path="/vendors/:id" element={<VendorPage />} />
+        <Route path="/returns" element={<ReturnsPage />} />
+        <Route
+          path="/returns/import"
+          element={
+            <RequireRole role="editor">
+              <ReturnsImportPage />
+            </RequireRole>
+          }
+        />
+        <Route path="/comparisons" element={<ComparisonsPage />} />
+        <Route path="/comparisons/:id" element={<ComparisonPage />} />
         {MODULES.filter((m) => !m.built).map((m) => (
           <Route key={m.path} path={m.path} element={<ModulePlaceholder module={m} />} />
         ))}
