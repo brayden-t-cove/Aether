@@ -12,6 +12,9 @@ Luna's product-readiness hub. The plan, data model and phases are in `docs/ROADM
 - Call `logActivity()` for every create, update and state change.
 - Roles and teams are defined once in `shared/roles.js`, which both server and client import.
 - Add new modules to `client/src/modules.js` so they appear in the sidebar.
+- Files and links live in `attachments` (polymorphic on entity_type/entity_id). After deleting any record that can own attachments, or its parent, call `pruneOrphanAttachments()` and remove the returned files.
+- Never serve an uploaded file inline unless its type is in the INLINE_TYPES allowlist in `server/routes/attachments.js`.
+- Don't commit real business data (vendors, contacts, notes): the repository is public.
 
 ## Checks
 

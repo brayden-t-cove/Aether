@@ -31,6 +31,10 @@ export const config = {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   },
+  // Folder for uploaded files (certificates, manuals, designs). On Railway, a
+  // volume mounted at e.g. /data with FILES_DIR=/data/files. Unset = links only.
+  filesDir: process.env.FILES_DIR || '',
+  maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 25,
   // Phase 3: Odyssey integration (not used yet).
   odyssey: {
     apiUrl: process.env.ODYSSEY_API_URL,

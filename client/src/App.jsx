@@ -14,6 +14,13 @@ import NewProjectPage from './pages/NewProjectPage.jsx';
 import ProjectPage from './pages/ProjectPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
+import ReadinessPage from './pages/ReadinessPage.jsx';
+import CertificationsPage from './pages/CertificationsPage.jsx';
+import CertificationPage from './pages/CertificationPage.jsx';
+import DocumentsPage from './pages/DocumentsPage.jsx';
+import DocumentPage from './pages/DocumentPage.jsx';
+import DesignRequestsPage from './pages/DesignRequestsPage.jsx';
+import DesignRequestPage from './pages/DesignRequestPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -58,6 +65,13 @@ export default function App() {
           }
         />
         <Route path="/projects/:id" element={<ProjectPage />} />
+        <Route path="/readiness" element={<ReadinessPage />} />
+        <Route path="/certifications" element={<CertificationsPage />} />
+        <Route path="/certifications/:id" element={<CertificationPage />} />
+        <Route path="/manuals" element={<DocumentsPage />} />
+        <Route path="/manuals/:id" element={<DocumentPage />} />
+        <Route path="/design-requests" element={<DesignRequestsPage />} />
+        <Route path="/design-requests/:id" element={<DesignRequestPage />} />
         {MODULES.filter((m) => !m.built).map((m) => (
           <Route key={m.path} path={m.path} element={<ModulePlaceholder module={m} />} />
         ))}

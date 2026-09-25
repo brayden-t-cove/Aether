@@ -14,6 +14,13 @@ import { marketRoutes } from './routes/markets.js';
 import { projectRoutes } from './routes/projects.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { importRoutes } from './routes/import.js';
+import { certificationRoutes } from './routes/certifications.js';
+import { variantRoutes } from './routes/variants.js';
+import { documentRoutes } from './routes/documents.js';
+import { requestRoutes } from './routes/requests.js';
+import { attachmentRoutes } from './routes/attachments.js';
+import { readinessRoutes } from './routes/readiness.js';
+import { createFileStore } from './lib/files.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLIENT_DIST = join(ROOT, 'client', 'dist');
@@ -26,6 +33,7 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 export function createApp({ db, config }) {
   const app = express();
   const passport = configurePassport(db, config);
+  const files = createFileStore(config);
   const PgSession = connectPgSimple(session);
 
   app.set('trust proxy', 1); // Railway terminates TLS at its proxy
@@ -71,11 +79,17 @@ export function createApp({ db, config }) {
   app.use(authRoutes({ db, config, passport }));
   app.use(userRoutes({ db }));
   app.use(activityRoutes({ db }));
-  app.use(productRoutes({ db }));
+  app.use(productRoutes({ db, files }));
   app.use(marketRoutes({ db }));
-  app.use(projectRoutes({ db }));
+  app.use(projectRoutes({ db, files }));
   app.use(dashboardRoutes({ db }));
   app.use(importRoutes({ db }));
+  app.use(certificationRoutes({ db, files }));
+  app.use(variantRoutes({ db }));
+  app.use(documentRoutes({ db, files }));
+  app.use(requestRoutes({ db, files }));
+  app.use(attachmentRoutes({ db, files }));
+  app.use(readinessRoutes({ db }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 

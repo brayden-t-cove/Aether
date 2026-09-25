@@ -667,6 +667,26 @@ label.inline {
   --dot: var(--status-serious);
 }
 
+/* Phase 2 statuses use tones instead of workflow states. */
+.tone-neutral {
+  --dot: var(--status-neutral);
+}
+.tone-active {
+  --dot: var(--status-active);
+}
+.tone-warning {
+  --dot: var(--status-warning);
+}
+.tone-serious {
+  --dot: var(--status-serious);
+}
+.tone-critical {
+  --dot: var(--status-critical);
+}
+.tone-good {
+  --dot: var(--status-good);
+}
+
 /* State pickers carry the same color as a left edge, beside the label. */
 .state-select {
   font-size: 0.85rem;
@@ -984,6 +1004,154 @@ label.check input {
 }
 .success-card {
   border-color: var(--status-good);
+}
+
+/* ── Phase 2 ───────────────────────────────────────────────────────────── */
+
+.page.wide {
+  max-width: none;
+}
+.page.narrow-ish {
+  max-width: 900px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+table.matrix th[scope='row'] {
+  font-weight: 600;
+  min-width: 180px;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+table.matrix td,
+table.matrix th {
+  vertical-align: top;
+}
+table.matrix td {
+  min-width: 170px;
+  border-left: 1px solid var(--border);
+}
+
+.rc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.rc-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+.rc-label {
+  color: var(--text-muted);
+  min-width: 4.8rem;
+}
+.rc-value {
+  color: var(--text);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.rc-value::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot, var(--status-neutral));
+}
+a.rc-value:hover {
+  text-decoration: underline;
+}
+.cert-chip {
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--dot, var(--border));
+  white-space: nowrap;
+}
+.cert-chip.tone-neutral {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.readiness-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.readiness-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+.readiness-card h3 {
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+}
+
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.attachment-icon {
+  width: 1.2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+.attachments.compact .btn.small {
+  padding: 0.15rem 0.45rem;
+}
+
+.versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.version {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.version.latest {
+  border-color: var(--accent);
+}
+.version-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 /* ── New project ───────────────────────────────────────────────────────── */

@@ -8,6 +8,7 @@ import { formatDate, joinList } from '../lib/format.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import ProductForm from '../components/ProductForm.jsx';
 import ProjectTable from '../components/ProjectTable.jsx';
+import ProductPhase2 from '../components/ProductPhase2.jsx';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -126,6 +127,8 @@ export default function ProductDetailPage() {
         <h2 className="pad-h">Projects</h2>
         {projects.length ? <ProjectTable projects={projects} hide={['product']} /> : <p className="muted pad">No projects for this product yet.</p>}
       </section>
+
+      <ProductPhase2 key={product.updated_at} product={product} editable={editable} />
 
       {can('admin') && (
         <div className="danger-zone">

@@ -4,7 +4,7 @@ Luna's product-readiness hub: one place to see where every product stands on its
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and the phase plan.
 
-**Status:** Phase 1 (products, markets and launch tracking). Products, markets, projects with checklists and blockers, and the boss dashboard are built. Modules for later phases show placeholder pages.
+**Status:** Phase 2 (certifications, manuals and packaging, design requests, variants). Phase 1 launch tracking and Phase 2 are built. Modules for later phases show placeholder pages.
 
 ## How launch tracking works
 
@@ -17,6 +17,24 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and th
 - **Starting checklists** (`server/lib/templates.js`) come from the team's launch checklists and are organised in stages. *US launch (new product)* runs from validating the product through samples, manual and packaging, listings, launch and post launch. *International launch* takes an existing product into a new country and fills in that market's marks, plug, voltage and languages. Items already wait on the steps they depend on.
 - **Stages:** items can belong to a stage, and the project page lists them stage by stage. Items without stages are grouped by category.
 - **States** are shared by projects and items: Not started, In progress, Blocked, In review, Done.
+
+## Certifications, manuals and design work (Phase 2)
+
+- **Readiness** (sidebar): one grid of products × markets. Each cell shows the market's required marks (✓ certified, … under way, ○ not tracked, ! rejected or expiring), plus where the manual and packaging stand. A cell is *Ready* when every required mark is certified and both the manual and packaging are approved or sent to the OEM.
+- **Certifications:** one record per mark per product and market (FCC, UKCA, PTCRB…), with state, lab, certificate number (e.g. FCC ID), issue and expiry dates, and evidence files or links. Certifications expired or expiring within 90 days show on the dashboard.
+- **Manuals & packaging:** each manual, packaging design or label for a product, either for one market or shared by all markets. Each has versions (v1, v2…) moving Draft → In design → In review → Approved → Sent to OEM. Approval records who approved it and when, and each version holds its own files.
+- **Design requests:** images, renders and graphics asked of the design team, optionally tied to a product and a document. They go Requested → In progress → Delivered → Approved. Deliverables are uploaded on the request.
+- **Regional variants:** on the product page, e.g. "UK variant: type G plug, UKCA label". Certifications and documents can point at a variant.
+
+### File uploads
+
+Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hides the upload buttons and accepts links only.
+
+- **Railway:** right-click the Aether service → **Attach volume** → mount path `/data`, then set the variable `FILES_DIR=/data/files`.
+- **Locally:** set `FILES_DIR=./.files` (it's git-ignored).
+- **Limits:** `MAX_UPLOAD_MB` sets the maximum file size (default 25).
+- **Downloads:** files are downloaded through Aether and need a signed-in user. PDFs and images open in the browser; every other type is downloaded rather than displayed.
+- **Backups:** Railway volumes are not backed up automatically. Keep important certificates in Drive too, or add backups when this becomes the main copy.
 
 ## Importing
 

@@ -6,6 +6,7 @@ import { logActivity } from '../lib/activity.js';
 import { diff, withTransaction } from '../lib/db.js';
 import { parse } from '../lib/validate.js';
 import { listProjects } from '../lib/projects.js';
+import { pruneOrphanAttachments } from '../lib/attachments.js';
 import {
   createProduct,
   deleteProduct,
@@ -27,7 +28,7 @@ function assertEditable(product) {
   if (product.source === 'odyssey') throw new HttpError(409, 'Products synced from Odyssey are edited in Odyssey');
 }
 
-export function productRoutes({ db }) {
+export function productRoutes({ db, files }) {
   const router = Router();
 
   router.get(
@@ -110,6 +111,8 @@ export function productRoutes({ db }) {
     asyncHandler(async (req, res) => {
       const product = await loadProduct(db, req.params.id);
       await deleteProduct(db, product.id);
+      const keys = await pruneOrphanAttachments(db);
+      await Promise.all(keys.map((k) => files?.remove(k)));
       await logActivity(db, {
         entityType: 'product',
         entityId: product.id,
