@@ -31,7 +31,7 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 5: notifications, digest, integration
 
   it('posts to Slack when work is blocked, certified, ready for review, delivered or imported', async () => {
     const { body: p } = await editor.agent.post('/api/projects').send({ name: 'Doorbell V2 — US launch', product_id: product.id }).expect(201);
-    const { body: item } = await editor.agent.post(`/api/projects/${p.project.id}/items`).send({ title: 'MP samples from Aoni' }).expect(201);
+    const { body: item } = await editor.agent.post(`/api/projects/${p.project.id}/items`).send({ title: 'MP samples from the factory' }).expect(201);
     await editor.agent.patch(`/api/items/${item.item.id}`).send({ state: 'blocked', notes: 'No reply since Tuesday' }).expect(200);
 
     const { body: cert } = await editor.agent.post('/api/certifications').send({ product_id: product.id, market_id: market.id, mark: 'FCC' }).expect(201);
@@ -52,7 +52,7 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 5: notifications, digest, integration
     const msgs = await slack.waitFor(7);
     expect(msgs).toHaveLength(7);
     expect(msgs.every((m) => m.startsWith('[staging] '))).toBe(true);
-    expect(msgs[0]).toMatch(/<https:\/\/aether\.test\/projects\/.+\|MP samples from Aoni> was marked \*Blocked\* in Doorbell V2 — US launch by Brayden\n> No reply since Tuesday/);
+    expect(msgs[0]).toMatch(/<https:\/\/aether\.test\/projects\/.+\|MP samples from the factory> was marked \*Blocked\* in Doorbell V2 — US launch by Brayden\n> No reply since Tuesday/);
     expect(msgs[1]).toMatch(/FCC for Doorbell V2 \(US\).* is \*certified\*/);
     expect(msgs[2]).toMatch(/User manual v2.*ready for review/);
     expect(msgs[3]).toMatch(/User manual v2.*approved by Admin/);
@@ -78,7 +78,7 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 5: notifications, digest, integration
     expect(await maybeSendDigest(db, notifier, { hourUtc: 14, now: new Date('2026-09-25T18:00:00Z') })).toBe(false);
     const msgs = await slack.waitFor(start + 1);
     expect(msgs.at(-1)).toMatch(/Aether daily digest/);
-    expect(msgs.at(-1)).toMatch(/\*Blocked \(1\)\*\n• .*MP samples from Aoni/);
+    expect(msgs.at(-1)).toMatch(/\*Blocked \(1\)\*\n• .*MP samples from the factory/);
     expect(await maybeSendDigest(db, notifier, { hourUtc: 14, now: new Date('2026-09-26T15:00:00Z') })).toBe(true);
   });
 
