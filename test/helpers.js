@@ -11,8 +11,11 @@ export const testConfig = {
   publicUrl: 'http://localhost:3001',
   sessionSecret: 'test-secret',
   adminEmail: 'boss@lunahome.com',
+  appEnv: 'test',
   google: { enabled: false },
   odyssey: {},
+  slack: { webhookUrl: '', digestHourUtc: 14 },
+  maxUploadMb: 25,
 };
 
 /** Fresh schema + migrated database. Destroys everything in TEST_DATABASE_URL. */
@@ -24,7 +27,12 @@ export async function setupDb() {
 }
 
 export function makeApp(db, overrides = {}) {
-  const config = { ...testConfig, ...overrides, odyssey: { ...testConfig.odyssey, ...overrides.odyssey } };
+  const config = {
+    ...testConfig,
+    ...overrides,
+    odyssey: { ...testConfig.odyssey, ...overrides.odyssey },
+    slack: { ...testConfig.slack, ...overrides.slack },
+  };
   return createApp({ db, config });
 }
 

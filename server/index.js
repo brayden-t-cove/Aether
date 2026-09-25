@@ -6,6 +6,8 @@ import { bootstrapAdmin, MIN_PASSWORD_LENGTH } from './lib/users.js';
 import { createOdysseyClient } from './lib/odyssey.js';
 import { runOdysseySync } from './lib/sync.js';
 import { startScheduler } from './lib/scheduler.js';
+import { createNotifier, messages } from './lib/notify.js';
+import { maybeSendDigest } from './lib/digest.js';
 
 assertConfig();
 
@@ -24,7 +26,11 @@ if (config.adminPassword) {
 }
 
 const odyssey = createOdysseyClient(config.odyssey);
-const app = createApp({ db, config, odyssey });
+const notify = createNotifier(config);
+const app = createApp({ db, config, odyssey, notify });
+
+// Tell Slack when Odyssey sync starts failing, once, not on every attempt.
+let lastSyncOk = true;
 
 const stopJobs = startScheduler([
   {
@@ -32,8 +38,18 @@ const stopJobs = startScheduler([
     everyMs: odyssey ? config.odyssey.syncMinutes * 60_000 : 0,
     run: async () => {
       const run = await runOdysseySync(db, odyssey, { trigger: 'schedule' });
-      if (run.ok === false) console.error(`[jobs] Odyssey sync failed: ${run.error}`);
+      if (run.ok === false) {
+        console.error(`[jobs] Odyssey sync failed: ${run.error}`);
+        if (lastSyncOk) notify.send(messages.syncFailed(notify, { error: run.error }));
+      }
+      if (typeof run.ok === 'boolean') lastSyncOk = run.ok;
     },
+  },
+  {
+    name: 'slack-digest',
+    everyMs: notify.enabled ? 10 * 60_000 : 0,
+    firstRunMs: 60_000,
+    run: () => maybeSendDigest(db, notify, { hourUtc: config.slack.digestHourUtc }),
   },
 ]);
 const server = app.listen(config.port, () => {
@@ -41,6 +57,7 @@ const server = app.listen(config.port, () => {
   console.log(`[aether] Google sign-in ${config.google.enabled ? 'enabled' : 'disabled'}`);
   console.log(`[aether] Odyssey sync ${odyssey ? `every ${config.odyssey.syncMinutes} min from ${odyssey.url}` : 'not configured'}`);
   console.log(`[aether] file uploads ${config.filesDir ? `to ${config.filesDir}` : 'off (links only)'}`);
+  console.log(`[aether] Slack ${notify.enabled ? `on, daily digest after ${config.slack.digestHourUtc}:00 UTC` : 'not configured'} · environment: ${config.appEnv}`);
 });
 
 function shutdown(signal) {

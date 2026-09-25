@@ -4,7 +4,7 @@ Luna's product-readiness hub: one place to see where every product stands on its
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and the phase plan.
 
-**Status:** Phase 2 (certifications, manuals and packaging, design requests, variants). Phase 1 launch tracking and Phase 2 are built. Modules for later phases show placeholder pages.
+**Status:** all five roadmap phases are built: launch tracking, certifications and manuals, Odyssey sync and vendors, returns and comparisons, and Slack notifications. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables, a staging environment and moving to Azure, and [docs/ODYSSEY_API.md](docs/ODYSSEY_API.md) for the Odyssey connection.
 
 ## How launch tracking works
 
@@ -35,6 +35,40 @@ Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hide
 - **Limits:** `MAX_UPLOAD_MB` sets the maximum file size (default 25).
 - **Downloads:** files are downloaded through Aether and need a signed-in user. PDFs and images open in the browser; every other type is downloaded rather than displayed.
 - **Backups:** Railway volumes are not backed up automatically. Keep important certificates in Drive too, or add backups when this becomes the main copy.
+
+## Vendors and Odyssey (Phase 3)
+
+- **Vendors:** manufacturers, cert labs, packaging, translation and logistics partners, with contacts (including WeChat/WhatsApp), linked products, and the certifications a lab runs.
+- **Odyssey sync:** every 15 minutes, and on **Sync now** (Products page or Admin → Integrations), Aether pulls Odyssey's products, test sessions and vendors.
+  - Existing Aether products are linked, not duplicated.
+  - Odyssey-only records arrive as synced, with their core fields read-only.
+  - Test results show on product and project pages.
+  - **Send to Odyssey** adds an Aether product to Odyssey's catalog.
+  - Setup and matching rules: [docs/ODYSSEY_API.md](docs/ODYSSEY_API.md). Odyssey needs a small change to accept Aether's service key.
+
+## Returns, listings and comparisons (Phase 4)
+
+- **Listings:** each product's marketplace listings (Amazon ASIN, TikTok product ID, SKU, link, state), shown on the product page.
+- **Returns:** **Returns → Import returns** reads Amazon's FBA customer returns report, TikTok Shop's returns export, or any similar CSV.
+  - Rows are matched to products, and reasons are grouped (defect / not as described / changed mind / shipping).
+  - Re-importing never double counts, and admins can undo an import.
+  - The Returns page shows monthly trends by channel, top reasons and a per-product breakdown.
+  - Unmatched rows can be assigned to a product, which also teaches future imports.
+- **Comparisons:** a grid of a Luna product against competitors, with editable rows (price, resolution, field of view…). Competitors can be reused across comparisons.
+
+## Notifications and operations (Phase 5)
+
+- **Slack** (`SLACK_WEBHOOK_URL`) gets a post when:
+  - an item is marked Blocked or a project is done
+  - a certification is certified or rejected
+  - a manual is ready for review or approved
+  - design work is requested or delivered
+  - returns are imported
+  - Odyssey sync starts failing
+- **Daily digest:** a morning message with overdue, blocked, expiring and in-review items, sent after `DIGEST_HOUR_UTC`.
+- **Admin → Integrations** shows what's connected, with test buttons.
+- **Staging:** `APP_ENV=staging` shows a banner so nobody mistakes it for production. Setup is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+- **Containers:** the `Dockerfile` builds a production image for Azure or any container host.
 
 ## Importing
 

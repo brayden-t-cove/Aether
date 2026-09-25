@@ -1189,6 +1189,22 @@ textarea:disabled {
   cursor: not-allowed;
 }
 
+.env-banner {
+  background: var(--flag-serious-bg);
+  border-bottom: 1px solid var(--status-serious);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.35rem 1rem;
+}
+code {
+  font-size: 0.85em;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+}
+
 /* ── Charts ────────────────────────────────────────────────────────────── */
 
 .chart {

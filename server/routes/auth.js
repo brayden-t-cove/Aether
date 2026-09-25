@@ -23,6 +23,7 @@ export function authRoutes({ db, config, passport }) {
     res.json({
       user: req.isAuthenticated() ? publicUser(req.user) : null,
       providers: { google: config.google.enabled, password: true },
+      env: config.appEnv,
     });
   });
 

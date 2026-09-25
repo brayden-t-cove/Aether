@@ -9,7 +9,7 @@ const THEMES = ['system', 'light', 'dark'];
 const THEME_LABELS = { system: 'Auto', light: 'Light', dark: 'Dark' };
 
 export default function Layout() {
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, env } = useAuth();
   const navigate = useNavigate();
   const [theme, setTheme] = useState(getStoredTheme);
   const [navOpen, setNavOpen] = useState(false);
@@ -50,6 +50,7 @@ export default function Layout() {
               <div className="nav-section">Admin</div>
               <NavLink to="/admin/users">Users</NavLink>
               <NavLink to="/admin/import">Import</NavLink>
+              <NavLink to="/admin/integrations">Integrations</NavLink>
             </>
           )}
         </nav>
@@ -75,6 +76,11 @@ export default function Layout() {
             Sign out
           </button>
         </header>
+        {env && env !== 'production' && (
+          <div className="env-banner" role="note">
+            {env === 'staging' ? "Staging: changes here don't affect the live Aether." : `${env[0].toUpperCase()}${env.slice(1)} environment`}
+          </div>
+        )}
         <main className="content">
           <Outlet />
         </main>

@@ -6,6 +6,7 @@ import { logActivity } from '../lib/activity.js';
 import { withTransaction } from '../lib/db.js';
 import { isUuid, parse, v } from '../lib/validate.js';
 import { MAX_RETURN_ROWS, planReturnsImport, runReturnsImport } from '../lib/returnsImport.js';
+import { messages } from '../lib/notify.js';
 import { assignReturns, listReturns, returnsSummary, unmatchedReturns } from '../lib/returns.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -29,7 +30,7 @@ const publicPlan = (plan) => ({
   })),
 });
 
-export function returnRoutes({ db }) {
+export function returnRoutes({ db, notify }) {
   const router = Router();
 
   router.get(
@@ -80,6 +81,9 @@ export function returnRoutes({ db }) {
         const record = await runReturnsImport(tx, plan, { filename, userId: req.user.id });
         return { plan, record };
       });
+      if (result.record.created_count) {
+        notify?.send(messages.returnsImported(notify, { count: result.record.created_count, units: result.plan.summary.units, channel: CHANNELS[channel], who: req.user.name || req.user.email }));
+      }
       res.json({ dryRun: false, import: result.record, ...publicPlan(result.plan) });
     }),
   );

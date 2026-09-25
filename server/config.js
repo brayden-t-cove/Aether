@@ -14,6 +14,8 @@ const publicUrl = (
 
 export const config = {
   isProduction,
+  // 'production', 'staging' or 'development'. Anything but production shows a banner in the app.
+  appEnv: process.env.APP_ENV || (isProduction ? 'production' : 'development'),
   port: Number(process.env.PORT) || 3001,
   publicUrl,
   databaseUrl: process.env.DATABASE_URL,
@@ -35,6 +37,12 @@ export const config = {
   // volume mounted at e.g. /data with FILES_DIR=/data/files. Unset = links only.
   filesDir: process.env.FILES_DIR || '',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 25,
+  // Slack incoming webhook for notifications and the daily digest. Unset = no Slack.
+  slack: {
+    webhookUrl: process.env.SLACK_WEBHOOK_URL || '',
+    // Hour (UTC) after which the daily digest goes out. 14:00 UTC is 9am Central / 10am Eastern.
+    digestHourUtc: Number.isInteger(Number(process.env.DIGEST_HOUR_UTC)) && process.env.DIGEST_HOUR_UTC !== '' ? Number(process.env.DIGEST_HOUR_UTC) : 14,
+  },
   // Odyssey integration: base URL of Odyssey and the service key Odyssey accepts from Aether.
   odyssey: {
     apiUrl: (process.env.ODYSSEY_API_URL || '').replace(/\/$/, ''),
