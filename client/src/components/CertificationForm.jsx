@@ -11,6 +11,7 @@ const toForm = (c = {}) => ({
   mark: c.mark || '',
   state: c.state || 'not_started',
   lab: c.lab || '',
+  lab_vendor_id: c.lab_vendor_id || '',
   cert_number: c.cert_number || '',
   issued_date: c.issued_date || '',
   expiry_date: c.expiry_date || '',
@@ -24,6 +25,7 @@ export default function CertificationForm({ certification, initial, onSubmit, on
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const variants = useLoad(form.product_id ? `/api/products/${form.product_id}/variants` : null);
+  const labs = useLoad('/api/vendors?type=cert_lab');
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   async function handleSubmit(e) {
@@ -31,7 +33,8 @@ export default function CertificationForm({ certification, initial, onSubmit, on
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ ...form, variant_id: form.variant_id || null });
+      const lab = labs.data?.vendors.find((v) => v.id === form.lab_vendor_id);
+      await onSubmit({ ...form, variant_id: form.variant_id || null, lab_vendor_id: form.lab_vendor_id || null, lab: lab ? lab.name : form.lab });
     } catch (err) {
       setError(err);
       setSaving(false);
@@ -82,7 +85,18 @@ export default function CertificationForm({ certification, initial, onSubmit, on
         </label>
         <label>
           Lab
-          <input value={form.lab} onChange={set('lab')} />
+          {labs.data?.vendors.length ? (
+            <select value={form.lab_vendor_id} onChange={set('lab_vendor_id')}>
+              <option value="">{form.lab && !form.lab_vendor_id ? form.lab : '— Choose a lab —'}</option>
+              {labs.data.vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input value={form.lab} onChange={set('lab')} placeholder="Lab name (add labs under Vendors)" />
+          )}
         </label>
         <label>
           <span>

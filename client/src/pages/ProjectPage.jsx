@@ -10,6 +10,7 @@ import ChecklistItem from '../components/ChecklistItem.jsx';
 import ErrorNote from '../components/ErrorNote.jsx';
 import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
+import TestSessions from '../components/TestSessions.jsx';
 
 /**
  * Group by stage, in the order stages first appear, when items have stages
@@ -297,6 +298,8 @@ export default function ProjectPage() {
         ))}
         {editable && <AddItemForm projectId={project.id} stages={stages} onAdded={reload} />}
       </section>
+
+      {project.product_id && <TestSessions projectId={project.id} />}
 
       <section className="card">
         <h2>History</h2>

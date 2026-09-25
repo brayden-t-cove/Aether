@@ -1154,6 +1154,25 @@ a.rc-value:hover {
   flex-wrap: wrap;
 }
 
+.odyssey-tag {
+  font-size: 0.7rem;
+  vertical-align: middle;
+  border-color: var(--status-active);
+  color: var(--text-muted);
+}
+.sync-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 /* ── New project ───────────────────────────────────────────────────────── */
 
 .choice-group {

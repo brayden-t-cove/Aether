@@ -7,6 +7,8 @@ import { useLoad } from '../lib/useLoad.js';
 import { joinList } from '../lib/format.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import ProductForm from '../components/ProductForm.jsx';
+import SyncStatus from '../components/SyncStatus.jsx';
+import OdysseyBadge from '../components/OdysseyBadge.jsx';
 
 const TABS = [['', 'All'], ...Object.entries(LIFECYCLES)];
 
@@ -17,7 +19,7 @@ export default function ProductsPage() {
   const lifecycle = params.get('lifecycle') || '';
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
-  const { data, error, loading } = useLoad(`/api/products${lifecycle ? `?lifecycle=${lifecycle}` : ''}`);
+  const { data, error, loading, reload } = useLoad(`/api/products${lifecycle ? `?lifecycle=${lifecycle}` : ''}`);
 
   const needle = q.trim().toLowerCase();
   const products = (data?.products || []).filter(
@@ -42,6 +44,8 @@ export default function ProductsPage() {
           </button>
         )}
       </header>
+
+      <SyncStatus onSynced={reload} />
 
       {adding && (
         <div className="card">
@@ -92,7 +96,8 @@ export default function ProductsPage() {
                     <td>
                       <Link to={`/products/${p.id}`}>
                         <strong>{p.name}</strong>
-                      </Link>
+                      </Link>{' '}
+                      {p.odyssey_id && <OdysseyBadge linked={p.source !== 'odyssey'} />}
                       <div className="muted small">{[p.model, p.sku].filter(Boolean).join(' · ')}</div>
                       {p.replaces_name && <div className="muted small">Replaces {p.replaces_model || p.replaces_name}</div>}
                     </td>

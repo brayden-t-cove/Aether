@@ -20,6 +20,7 @@ const toForm = (p = {}) => ({
 
 /** Create or edit a product. onSubmit receives the API payload and may throw. */
 export default function ProductForm({ product, onSubmit, onCancel, submitLabel = 'Save' }) {
+  const synced = product?.source === 'odyssey';
   const [form, setForm] = useState(() => toForm(product));
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -46,16 +47,17 @@ export default function ProductForm({ product, onSubmit, onCancel, submitLabel =
   return (
     <form className="stack" onSubmit={handleSubmit}>
       <ErrorNote error={error} />
+      {synced && <p className="muted small">This product comes from Odyssey: name, model, category, manufacturer and lifecycle are edited there.</p>}
       <div className="form-row">
         <label>
           Name
-          <input required value={form.name} onChange={set('name')} />
+          <input required value={form.name} onChange={set('name')} disabled={synced} />
         </label>
         <label>
           <span>
             Model <span className="muted small">(also its Odyssey name)</span>
           </span>
-          <input value={form.model} onChange={set('model')} placeholder="W4" />
+          <input value={form.model} onChange={set('model')} disabled={synced} placeholder="W4" />
         </label>
         <label>
           SKU
@@ -65,15 +67,15 @@ export default function ProductForm({ product, onSubmit, onCancel, submitLabel =
       <div className="form-row">
         <label>
           Category
-          <input value={form.category} onChange={set('category')} placeholder="Doorbell, Indoor, Window…" />
+          <input value={form.category} onChange={set('category')} disabled={synced} placeholder="Doorbell, Indoor, Window…" />
         </label>
         <label>
           Manufacturer
-          <input value={form.manufacturer} onChange={set('manufacturer')} />
+          <input value={form.manufacturer} onChange={set('manufacturer')} disabled={synced} />
         </label>
         <label>
           Lifecycle
-          <select value={form.lifecycle} onChange={set('lifecycle')}>
+          <select value={form.lifecycle} onChange={set('lifecycle')} disabled={synced}>
             {Object.entries(LIFECYCLES).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}

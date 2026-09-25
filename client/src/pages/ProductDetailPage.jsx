@@ -9,19 +9,38 @@ import ErrorNote from '../components/ErrorNote.jsx';
 import ProductForm from '../components/ProductForm.jsx';
 import ProjectTable from '../components/ProjectTable.jsx';
 import ProductPhase2 from '../components/ProductPhase2.jsx';
+import OdysseyBadge from '../components/OdysseyBadge.jsx';
+import TestSessions from '../components/TestSessions.jsx';
+import { VENDOR_TYPES } from '../../../shared/workflow.js';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const { can } = useAuth();
   const navigate = useNavigate();
   const { data, error, reload } = useLoad(`/api/products/${id}`);
+  const odyssey = useLoad('/api/odyssey/status');
+  const [sendError, setSendError] = useState(null);
+  const [sending, setSending] = useState(false);
   const [editing, setEditing] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
   if (error) return <div className="page"><ErrorNote error={error} /></div>;
   if (!data) return <div className="page"><p className="muted">Loading…</p></div>;
-  const { product, projects } = data;
-  const editable = can('editor') && product.source !== 'odyssey';
+  const { product, projects, vendors } = data;
+  const editable = can('editor');
+
+  async function sendToOdyssey() {
+    setSending(true);
+    setSendError(null);
+    try {
+      await api(`/api/products/${id}/send-to-odyssey`, { method: 'POST', body: {} });
+      reload();
+    } catch (err) {
+      setSendError(err);
+    } finally {
+      setSending(false);
+    }
+  }
 
   async function save(payload) {
     await api(`/api/products/${id}`, { method: 'PATCH', body: payload });
@@ -46,7 +65,9 @@ export default function ProductDetailPage() {
       </nav>
       <header className="page-header row between">
         <div>
-          <h1>{product.name}</h1>
+          <h1>
+            {product.name} {product.odyssey_id && <OdysseyBadge linked={product.source !== 'odyssey'} />}
+          </h1>
           <p className="muted">
             <span className={`tag lifecycle-${product.lifecycle}`}>{LIFECYCLES[product.lifecycle]}</span>
             {product.model && <> · {product.model}</>}
@@ -60,6 +81,11 @@ export default function ProductDetailPage() {
               Start a project
             </Link>
           )}
+          {editable && odyssey.data?.configured && !product.odyssey_id && (
+            <button className="btn" onClick={sendToOdyssey} disabled={sending} title="Add this product to Odyssey's catalog">
+              {sending ? 'Sending…' : 'Send to Odyssey'}
+            </button>
+          )}
           {editable && !editing && (
             <button className="btn" onClick={() => setEditing(true)}>
               Edit
@@ -67,6 +93,7 @@ export default function ProductDetailPage() {
           )}
         </div>
       </header>
+      <ErrorNote error={sendError} />
 
       {editing ? (
         <div className="card">
@@ -112,7 +139,26 @@ export default function ProductDetailPage() {
             <dt>Discontinued date</dt>
             <dd>{formatDate(product.sunset_date) || '—'}</dd>
             <dt>Source</dt>
-            <dd>{product.source === 'odyssey' ? 'Synced from Odyssey (edit it there)' : 'Aether'}</dd>
+            <dd>
+              {product.source === 'odyssey'
+                ? 'Synced from Odyssey (name, model, manufacturer, category and lifecycle are edited there)'
+                : product.odyssey_id
+                  ? 'Aether, linked to Odyssey'
+                  : 'Aether'}
+            </dd>
+            {vendors.length > 0 && (
+              <>
+                <dt>Vendors</dt>
+                <dd>
+                  {vendors.map((v, i) => (
+                    <span key={`${v.id}:${v.role}`}>
+                      {i > 0 && ', '}
+                      <Link to={`/vendors/${v.id}`}>{v.name}</Link> <span className="muted small">({VENDOR_TYPES[v.role].toLowerCase()})</span>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            )}
             {product.notes && (
               <>
                 <dt>Notes</dt>
@@ -129,6 +175,7 @@ export default function ProductDetailPage() {
       </section>
 
       <ProductPhase2 key={product.updated_at} product={product} editable={editable} />
+      <TestSessions productId={product.id} />
 
       {can('admin') && (
         <div className="danger-zone">

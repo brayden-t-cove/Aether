@@ -9,6 +9,7 @@ export const CERT_FIELDS = {
   mark: (value) => v.text({ label: 'Mark', required: true, max: 50 })(value).toUpperCase(),
   state: v.oneOf(CERT_STATES, { label: 'State' }),
   lab: v.text({ label: 'Lab', max: 200 }),
+  lab_vendor_id: v.id({ label: 'Lab vendor' }),
   cert_number: v.text({ label: 'Certificate number', max: 200 }),
   issued_date: v.date({ label: 'Issued date' }),
   expiry_date: v.date({ label: 'Expiry date' }),
@@ -23,6 +24,7 @@ const CERT_SELECT = `
          p.name AS product_name, p.model AS product_model,
          m.code AS market_code, m.name AS market_name,
          pv.name AS variant_name,
+         lv.name AS lab_vendor_name,
          CASE
            WHEN c.state = 'certified' AND c.expiry_date < current_date THEN 'expired'
            WHEN c.state = 'certified' AND c.expiry_date < current_date + ${EXPIRY_WARNING_DAYS} THEN 'expiring'
@@ -30,7 +32,8 @@ const CERT_SELECT = `
     FROM certifications c
     JOIN products p ON p.id = c.product_id
     JOIN markets m ON m.id = c.market_id
-    LEFT JOIN product_variants pv ON pv.id = c.variant_id`;
+    LEFT JOIN product_variants pv ON pv.id = c.variant_id
+    LEFT JOIN vendors lv ON lv.id = c.lab_vendor_id`;
 
 export async function listCertifications(db, { productId, marketId, state, expiring } = {}) {
   const where = [];
@@ -60,8 +63,8 @@ export async function getCertification(db, id) {
 export async function createCertification(db, f, userId) {
   const { rows } = await db.query(
     `INSERT INTO certifications
-       (product_id, market_id, variant_id, mark, state, lab, cert_number, issued_date, expiry_date, notes, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (product_id, market_id, variant_id, mark, state, lab, lab_vendor_id, cert_number, issued_date, expiry_date, notes, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
     [
       f.product_id,
@@ -70,6 +73,7 @@ export async function createCertification(db, f, userId) {
       f.mark,
       f.state ?? 'not_started',
       f.lab ?? '',
+      f.lab_vendor_id ?? null,
       f.cert_number ?? '',
       f.issued_date ?? null,
       f.expiry_date ?? null,

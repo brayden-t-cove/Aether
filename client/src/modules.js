@@ -55,6 +55,7 @@ export const MODULES = [
   {
     path: '/vendors',
     label: 'Vendors',
+    built: true,
     phase: 3,
     summary: 'Manufacturers, cert labs, packaging and translation vendors, shared with Odyssey.',
   },

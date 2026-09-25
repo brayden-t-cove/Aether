@@ -7,6 +7,7 @@ import { diff, withTransaction } from '../lib/db.js';
 import { parse } from '../lib/validate.js';
 import { listProjects } from '../lib/projects.js';
 import { pruneOrphanAttachments } from '../lib/attachments.js';
+import { vendorsForProduct } from '../lib/vendors.js';
 import {
   createProduct,
   deleteProduct,
@@ -24,8 +25,13 @@ async function loadProduct(db, id) {
   return product;
 }
 
-function assertEditable(product) {
-  if (product.source === 'odyssey') throw new HttpError(409, 'Products synced from Odyssey are edited in Odyssey');
+// Odyssey owns these fields for products that came from Odyssey; everything else stays editable here.
+const SYNCED_FIELDS = ['name', 'model', 'manufacturer', 'category', 'lifecycle'];
+
+function assertEditable(product, fields) {
+  if (product.source !== 'odyssey') return;
+  const locked = SYNCED_FIELDS.filter((k) => k in fields && fields[k] !== product[k]);
+  if (locked.length) throw new HttpError(409, `This product is synced from Odyssey. Change ${locked.join(', ')} in Odyssey.`);
 }
 
 export function productRoutes({ db, files }) {
@@ -46,7 +52,8 @@ export function productRoutes({ db, files }) {
     requireAuth,
     asyncHandler(async (req, res) => {
       const product = await loadProduct(db, req.params.id);
-      res.json({ product, projects: await listProjects(db, { productId: product.id }) });
+      const [projects, vendors] = await Promise.all([listProjects(db, { productId: product.id }), vendorsForProduct(db, product.id)]);
+      res.json({ product, projects, vendors });
     }),
   );
 
@@ -77,8 +84,8 @@ export function productRoutes({ db, files }) {
     requireRole('editor'),
     asyncHandler(async (req, res) => {
       const before = await loadProduct(db, req.params.id);
-      assertEditable(before);
       const fields = parse(req.body, PRODUCT_FIELDS);
+      assertEditable(before, fields);
       const { market_ids } = parse(req.body, PRODUCT_MARKETS_FIELD);
       if (fields.replaces_id && fields.replaces_id === before.id) throw new HttpError(400, "A product can't replace itself");
 

@@ -24,7 +24,8 @@ export async function setupDb() {
 }
 
 export function makeApp(db, overrides = {}) {
-  return createApp({ db, config: { ...testConfig, ...overrides } });
+  const config = { ...testConfig, ...overrides, odyssey: { ...testConfig.odyssey, ...overrides.odyssey } };
+  return createApp({ db, config });
 }
 
 export const PASSWORD = 'correct horse battery';

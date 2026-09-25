@@ -35,10 +35,11 @@ export const config = {
   // volume mounted at e.g. /data with FILES_DIR=/data/files. Unset = links only.
   filesDir: process.env.FILES_DIR || '',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 25,
-  // Phase 3: Odyssey integration (not used yet).
+  // Odyssey integration: base URL of Odyssey and the service key Odyssey accepts from Aether.
   odyssey: {
-    apiUrl: process.env.ODYSSEY_API_URL,
-    apiKey: process.env.ODYSSEY_API_KEY,
+    apiUrl: (process.env.ODYSSEY_API_URL || '').replace(/\/$/, ''),
+    apiKey: process.env.ODYSSEY_API_KEY || '',
+    syncMinutes: Number(process.env.ODYSSEY_SYNC_MINUTES) || 15,
   },
 };
 

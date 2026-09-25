@@ -87,3 +87,21 @@ export const REQUEST_STATES = {
   approved: 'Approved',
   cancelled: 'Cancelled',
 };
+
+// ── Phase 3 ────────────────────────────────────────────────────────────────
+
+export const VENDOR_TYPES = {
+  manufacturer: 'Manufacturer',
+  cert_lab: 'Certification lab',
+  packaging: 'Packaging',
+  translation: 'Translation',
+  logistics: 'Logistics',
+  design: 'Design',
+  other: 'Other',
+};
+
+export const VENDOR_STATUSES = {
+  prospect: 'Prospect',
+  active: 'Active',
+  inactive: 'Inactive',
+};

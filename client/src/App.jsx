@@ -21,6 +21,8 @@ import DocumentsPage from './pages/DocumentsPage.jsx';
 import DocumentPage from './pages/DocumentPage.jsx';
 import DesignRequestsPage from './pages/DesignRequestsPage.jsx';
 import DesignRequestPage from './pages/DesignRequestPage.jsx';
+import VendorsPage from './pages/VendorsPage.jsx';
+import VendorPage from './pages/VendorPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -72,6 +74,8 @@ export default function App() {
         <Route path="/manuals/:id" element={<DocumentPage />} />
         <Route path="/design-requests" element={<DesignRequestsPage />} />
         <Route path="/design-requests/:id" element={<DesignRequestPage />} />
+        <Route path="/vendors" element={<VendorsPage />} />
+        <Route path="/vendors/:id" element={<VendorPage />} />
         {MODULES.filter((m) => !m.built).map((m) => (
           <Route key={m.path} path={m.path} element={<ModulePlaceholder module={m} />} />
         ))}
