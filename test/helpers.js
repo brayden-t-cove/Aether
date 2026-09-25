@@ -23,8 +23,8 @@ export async function setupDb() {
   return db;
 }
 
-export function makeApp(db) {
-  return createApp({ db, config: testConfig });
+export function makeApp(db, overrides = {}) {
+  return createApp({ db, config: { ...testConfig, ...overrides } });
 }
 
 export const PASSWORD = 'correct horse battery';

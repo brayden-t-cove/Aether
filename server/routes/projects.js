@@ -6,6 +6,7 @@ import { diff, withTransaction } from '../lib/db.js';
 import { isUuid, parse, v } from '../lib/validate.js';
 import { PROJECT_TYPES, STATES } from '../../shared/workflow.js';
 import { getMarket } from '../lib/markets.js';
+import { pruneOrphanAttachments } from '../lib/attachments.js';
 import { getTemplate, listTemplates } from '../lib/templates.js';
 import {
   createProject,
@@ -53,8 +54,12 @@ const logItem = (db, item, action, changes, userId) =>
     userId,
   });
 
-export function projectRoutes({ db }) {
+export function projectRoutes({ db, files }) {
   const router = Router();
+  const cleanupFiles = async () => {
+    const keys = await pruneOrphanAttachments(db);
+    await Promise.all(keys.map((k) => files?.remove(k)));
+  };
 
   router.get('/api/templates', requireAuth, (req, res) => res.json({ templates: listTemplates() }));
 
@@ -154,6 +159,7 @@ export function projectRoutes({ db }) {
     asyncHandler(async (req, res) => {
       const project = await loadProject(db, req.params.id);
       await deleteProject(db, project.id);
+      await cleanupFiles();
       await logActivity(db, {
         entityType: 'project',
         entityId: project.id,
@@ -216,6 +222,7 @@ export function projectRoutes({ db }) {
     asyncHandler(async (req, res) => {
       const item = await loadItem(db, req.params.id);
       await deleteItem(db, item.id);
+      await cleanupFiles();
       await logItem(db, item, 'item_removed', {}, req.user.id);
       res.json({ ok: true });
     }),

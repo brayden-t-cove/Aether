@@ -40,3 +40,50 @@ export const LIFECYCLES = {
   active: 'Active',
   sunset: 'Discontinued',
 };
+
+// ── Phase 2 ────────────────────────────────────────────────────────────────
+
+export const CERT_STATES = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  submitted: 'Submitted',
+  certified: 'Certified',
+  rejected: 'Rejected',
+  not_required: 'Not required',
+};
+
+/** Days before expiry that a certification counts as "expiring soon". */
+export const EXPIRY_WARNING_DAYS = 90;
+
+export const DOCUMENT_KINDS = {
+  manual: 'User manual',
+  quick_start: 'Quick start guide',
+  packaging: 'Packaging',
+  label: 'Label',
+  insert: 'Insert',
+  other: 'Other',
+};
+
+export const VERSION_STATES = {
+  draft: 'Draft',
+  in_design: 'In design',
+  in_review: 'In review',
+  approved: 'Approved',
+  sent: 'Sent to OEM',
+};
+
+export const REQUEST_TYPES = {
+  image: 'Image',
+  render: 'Render',
+  graphic: 'Graphic',
+  video: 'Video',
+  other: 'Other',
+};
+
+export const REQUEST_STATES = {
+  requested: 'Requested',
+  in_progress: 'In progress',
+  delivered: 'Delivered',
+  approved: 'Approved',
+  cancelled: 'Cancelled',
+};
