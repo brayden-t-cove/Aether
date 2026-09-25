@@ -4,7 +4,29 @@ Luna's product-readiness hub: one place to see where every product stands on its
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and the phase plan.
 
-**Status:** Phase 0 (foundation). Users can sign in with Google or email and see the app shell. The module pages are placeholders until their phase is built.
+**Status:** Phase 1 (products, markets and launch tracking). Products, markets, projects with checklists and blockers, and the boss dashboard are built. Modules for later phases show placeholder pages.
+
+## How launch tracking works
+
+- **Products** are Luna's catalog, marked Upcoming, Active or Sunset.
+- **Markets** hold each country's plug types, voltage, required marks and languages. US, CA, UK, EU and AU are set up at first.
+- **Projects** tie a product to a market (for a launch) with an owner, a target date and a state.
+- **Checklist items** belong to a project, each with a category, owner, due date, state, evidence link and notes.
+- **Waits on:** an item can wait on other items, even in another project. An item can't be marked Done while something it waits on is still open, and loops are refused.
+- **Blocked vs waiting:** *Blocked* means someone marked the item Blocked (an outside problem). *Waiting* means it is waiting on an earlier step, which is normal. The dashboard counts only Blocked items, and shows how many other items each one holds up.
+- **Starting checklists** (`server/lib/templates.js`) come from the team's launch checklists and are organised in stages. *US launch (new product)* runs from validating the product through samples, manual and packaging, listings, launch and post launch. *International launch* takes an existing product into a new country and fills in that market's marks, plug, voltage and languages. Items already wait on the steps they depend on.
+- **Stages:** items can belong to a stage, and the project page lists them stage by stage. Items without stages are grouped by category.
+- **States** are shared by projects and items: Not started, In progress, Blocked, In review, Done.
+
+## Importing
+
+Admins can bulk-load data under **Admin → Import**. Every import shows a preview first, and nothing is saved until you click Import.
+
+- **Paste from a spreadsheet** (header row included) or upload a `.csv`/`.tsv`. Recognized columns: Name, Model (or Odyssey Name), SKU, Category, Manufacturer, Lifecycle, Launch Date, Sunset Date, Markets, Channels, Replaces, Notes. `--` or blank means unknown. Lifecycle accepts the team's words (Active, Development, Discontinued…), and markets accept names or codes (Mex, South Africa, UK…).
+- **Upload a `.json` file** with `products` (the same columns) and `projects` (name, type, product model or name, market code, owner email, state, target date, description, and `items` with title, category, state, owner, due date, notes and `waits_on` titles).
+- Products are matched to existing ones by model, then SKU, then name, and updated instead of duplicated. Projects whose name already exists are skipped, so running the same file twice is safe.
+
+Don't commit import files with real business data: this repository is public.
 
 ## Stack
 
