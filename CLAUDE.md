@@ -22,4 +22,7 @@ Luna's product-readiness hub. The plan, data model and phases are in `docs/ROADM
 npm run lint
 TEST_DATABASE_URL=postgres://aether:aether@localhost:5432/aether_test npm test   # wipes that DB
 npm run build
+npm run test:e2e   # browser suite; wipes the aether_e2e database
 ```
+
+End-to-end specs in `e2e/` run in order and share data (see `e2e/server.js`). Use fake data in fixtures only.

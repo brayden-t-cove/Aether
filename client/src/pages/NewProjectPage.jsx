@@ -28,7 +28,8 @@ export default function NewProjectPage() {
     market_id: params.get('market') || '',
     owner_id: user.id,
     target_date: '',
-    type: 'launch',
+    // Matches the default template's project type (see server/lib/templates.js).
+    type: params.get('market') ? 'launch' : 'new_product',
     description: '',
   });
   const [name, setName] = useState('');
@@ -129,7 +130,7 @@ export default function NewProjectPage() {
                 {products.data.products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
-                    {p.sku ? ` (${p.sku})` : ''}
+                    {p.model ? ` (${p.model})` : ''}
                   </option>
                 ))}
               </select>

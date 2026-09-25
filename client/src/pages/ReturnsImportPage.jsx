@@ -89,7 +89,7 @@ export default function ReturnsImportPage() {
       <div className="card stack">
         <div className="form-row">
           <label>
-            Marketplace
+            Channel
             <select value={channel} onChange={(e) => { setChannel(e.target.value); setPlan(null); setResult(null); }}>
               {Object.entries(CHANNELS).map(([k, v]) => (
                 <option key={k} value={k}>

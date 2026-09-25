@@ -40,7 +40,9 @@ export default function ProductListings({ productId, editable }) {
       <ErrorNote error={error} />
       {t?.units > 0 && (
         <p className="small">
-          <Link to={`/returns?productId=${productId}&period=all`}>{t.units} units returned</Link>
+          <Link to={`/returns?productId=${productId}&period=all`}>
+            {t.units} {t.units === 1 ? 'unit' : 'units'} returned
+          </Link>
           {t.defect_units > 0 && `, ${Math.round((t.defect_units / t.units) * 100)}% for defects or quality`}
           {returns.data.topReasons[0] && ` · top reason: ${returns.data.topReasons[0].reason}`}
         </p>

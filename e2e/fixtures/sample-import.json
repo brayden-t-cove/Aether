@@ -1,0 +1,22 @@
+{
+  "products": [
+    { "Name": "Sample Doorbell", "Category": "Doorbell", "Lifecycle": "Active", "Markets": "US; CA", "Channels": "Amazon; Tiktok", "Model": "SD-100" },
+    { "Name": "Sample Window Cam", "Category": "Window", "Lifecycle": "Active", "Markets": "US", "Channels": "Amazon", "Model": "W4" },
+    { "Name": "Sample Window Cam (V2)", "Category": "Window", "Lifecycle": "Development", "Manufacturer": "Sample Factory", "Markets": "US", "Model": "SW-200", "Replaces": "W4" },
+    { "Name": "Sample Old Cam", "Category": "Indoor", "Lifecycle": "Discontinued", "Model": "OLD-1" }
+  ],
+  "projects": [
+    {
+      "name": "Sample Window Cam (V2) — packaging",
+      "type": "new_product",
+      "product": "SW-200",
+      "market": "US",
+      "owner": "admin@e2e.test",
+      "state": "in_progress",
+      "items": [
+        { "title": "Final artwork", "category": "packaging", "state": "in_progress" },
+        { "title": "Validate barcode", "category": "packaging", "waits_on": ["Final artwork"] }
+      ]
+    }
+  ]
+}

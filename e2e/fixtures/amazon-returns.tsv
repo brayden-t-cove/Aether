@@ -1,0 +1,5 @@
+return-date	order-id	sku	asin	product-name	quantity	reason	license-plate-number	customer-comments
+2026-07-04T10:00:00+00:00	111-0001	SD-SKU	B0SAMPLE1	Sample Doorbell 2K	1	DEFECTIVE	LPN-0001	Stopped working
+2026-08-11T10:00:00+00:00	111-0002	SD-SKU	B0SAMPLE1	Sample Doorbell 2K	2	UNWANTED_ITEM	LPN-0002	
+2026-09-02T10:00:00+00:00	111-0003	ZZ-SKU	B0MYSTERY	Unknown gizmo	1	DAMAGED_BY_CARRIER	LPN-0003	
+2026-09-03T10:00:00+00:00	111-0004	W4-SKU		Sample W4 window camera	1	NOT_AS_DESCRIBED	LPN-0004	

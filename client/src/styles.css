@@ -378,7 +378,7 @@ a {
 
 .details {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 0.4rem 1.5rem;
   margin: 0;
 }
@@ -387,6 +387,8 @@ a {
 }
 .details dd {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ── Controls ──────────────────────────────────────────────────────────── */
@@ -1212,6 +1214,7 @@ code {
 }
 .chart-svg {
   width: 100%;
+  max-width: 760px;
   height: auto;
   display: block;
 }

@@ -36,6 +36,8 @@ function monthRange(first, last) {
   return out.slice(-24);
 }
 
+const units = (n) => `${n} ${n === 1 ? 'unit' : 'units'}`;
+
 const monthLabel = (key) => new Date(`${key}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
 
 function Unmatched({ onAssigned }) {
@@ -67,7 +69,7 @@ function Unmatched({ onAssigned }) {
             <div className="dash-item-main">
               <strong>{u.product_label || u.sku || u.external_id}</strong>
               <span className="muted small">
-                {CHANNELS[u.channel]} · {[u.external_id, u.sku].filter(Boolean).join(' · ')} · {u.units} units
+                {CHANNELS[u.channel]} · {[u.external_id, u.sku].filter(Boolean).join(' · ')} · {units(u.units)}
               </span>
             </div>
             {can('editor') && (
@@ -187,17 +189,17 @@ export default function ReturnsPage() {
             <div className={`stat ${defectShare >= 30 ? 'stat-blocked' : ''}`}>
               <span className="stat-label">Defect or quality</span>
               <span className="stat-value">{defectShare}%</span>
-              <span className="stat-hint">{t.defect_units} units</span>
+              <span className="stat-hint">{units(t.defect_units)}</span>
             </div>
             <div className="stat">
               <span className="stat-label">Top reason</span>
               <span className="stat-value stat-text">{data.topReasons[0]?.reason || '—'}</span>
-              <span className="stat-hint">{data.topReasons[0]?.units} units</span>
+              <span className="stat-hint">{data.topReasons[0] ? units(data.topReasons[0].units) : ''}</span>
             </div>
             <div className={`stat ${t.unmatched_units ? 'stat-overdue' : ''}`}>
               <span className="stat-label">Not matched to a product</span>
               <span className="stat-value">{t.unmatched_units}</span>
-              <span className="stat-hint">units</span>
+              <span className="stat-hint">{t.unmatched_units === 1 ? 'unit' : 'units'}</span>
             </div>
           </section>
 

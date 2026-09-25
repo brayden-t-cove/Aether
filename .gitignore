@@ -7,3 +7,5 @@ client/dist/
 .DS_Store
 coverage/
 .files/
+test-results/
+playwright-report/

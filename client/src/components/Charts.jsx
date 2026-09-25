@@ -25,7 +25,8 @@ export function StackedColumns({ data, series, height = 220, ariaLabel }) {
   const band = innerW / Math.max(1, data.length);
   const barW = Math.min(44, band * 0.6);
   const y = (v) => pad.top + innerH - (v / max) * innerH;
-  const ticks = [0, max / 2, max];
+  // Whole-number ticks only: these are counts.
+  const ticks = max % 2 === 0 ? [0, max / 2, max] : [0, max];
 
   return (
     <div className="chart">

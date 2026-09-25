@@ -142,6 +142,7 @@ The Vite dev server proxies `/auth` to the API, so the whole flow stays on port 
 | `npm run user:create -- --email … --role admin\|editor\|viewer [--password …] [--team …]` | Create a user, or update an existing one |
 | `npm run lint` | ESLint |
 | `npm test` | Tests. Database tests need `TEST_DATABASE_URL` and **wipe that database** |
+| `npm run test:e2e` | End-to-end browser tests (Playwright) across every phase, against a real server with fake Odyssey and Slack. Uses `E2E_DATABASE_URL` (default `aether_e2e`), which it wipes. |
 
 ## Users and roles
 
