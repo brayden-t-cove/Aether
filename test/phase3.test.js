@@ -134,4 +134,29 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 3: Odyssey sync and vendors', () => {
     await editor.agent.delete(`/api/vendors/${lab.id}`).expect(403);
     await admin.agent.delete(`/api/vendors/${lab.id}`).expect(200);
   });
+
+  it("keeps syncing when Odyssey reuses a model or vendor name that Aether already has", async () => {
+    // Two Odyssey products share a model (e.g. a platform model and its Luna variation). The first links to
+    // Aether's product; the second can't take the model too, so it is added without one.
+    const { body: { product: garage } } = await editor.agent.post('/api/products').send({ name: 'Garage Camera', model: 'GC1' }).expect(201);
+    fake.state.catalog.push(
+      { id: 'ody-gc', name: 'Garage Camera', modelNumber: 'GC1', category: 'camera', status: 'active' },
+      { id: 'ody-gc-luna', name: 'Garage Cam Pro', modelNumber: 'GC1', category: 'camera', status: 'active' },
+    );
+    await editor.agent.post('/api/vendors').send({ name: 'Aether Only Supplier' }).expect(201);
+
+    const first = await editor.agent.post('/api/odyssey/sync').expect(200);
+    expect(first.body.run).toMatchObject({ ok: true });
+    // Later runs update synced records; they must not take a model or name another record already has.
+    fake.state.catalog.find((p) => p.id === 'ody-gc-luna').name = 'Garage Cam Pro 2';
+    fake.state.vendors.find((v) => v.id === 'ven-2').name = 'aether only supplier';
+    const second = await editor.agent.post('/api/odyssey/sync').expect(200);
+    expect(second.body.run).toMatchObject({ ok: true, error: null });
+
+    const { body } = await viewer.agent.get('/api/products').expect(200);
+    expect(body.products.find((p) => p.id === garage.id)).toMatchObject({ model: 'GC1', odyssey_id: 'ody-gc' });
+    expect(body.products.find((p) => p.odyssey_id === 'ody-gc-luna')).toMatchObject({ name: 'Garage Cam Pro 2', model: null });
+    const { body: vendors } = await viewer.agent.get('/api/vendors').expect(200);
+    expect(vendors.vendors.find((v) => v.odyssey_id === 'ven-2').name).toBe('Prospect Labs');
+  });
 });
