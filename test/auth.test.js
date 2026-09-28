@@ -101,3 +101,17 @@ describe.skipIf(!TEST_DATABASE_URL)('auth', () => {
     });
   });
 });
+
+describe.skipIf(!TEST_DATABASE_URL)('sign-in rate limit', () => {
+  it('counts only failed attempts', async () => {
+    const db = await setupDb();
+    const app = makeApp(db);
+    await createUser(db, { email: 'team@lunahome.com', password: PASSWORD });
+    for (let i = 0; i < 25; i++) {
+      await request(app).post('/auth/local').send({ email: 'team@lunahome.com', password: PASSWORD }).expect(200);
+    }
+    for (let i = 0; i < 20; i++) await request(app).post('/auth/local').send({ email: 'team@lunahome.com', password: 'wrong' }).expect(401);
+    await request(app).post('/auth/local').send({ email: 'team@lunahome.com', password: PASSWORD }).expect(429);
+    await db.end();
+  }, 60_000); // dozens of real password checks
+});

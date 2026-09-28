@@ -134,6 +134,12 @@ Five phases, each shippable on its own. Phase 1 alone answers "where are we on t
 
 Recommended order is 0 → 1 → 2, then 3 and 4 in whichever order the team needs first.
 
+**Status (Sep 2026):** phases 0–5 are built. What's left depends on other systems or the team:
+
+- Odyssey needs the service-key change in `docs/ODYSSEY_API.md` before sync can run.
+- Google Drive integration (a file picker, rather than pasted links) is still open.
+- A staging environment and an Azure move are documented in `docs/DEPLOYMENT.md`, ready when needed.
+
 ## Open questions
 
 - [ ] Returns: what format do Amazon and TikTok return reports arrive in, and how often will they be imported?

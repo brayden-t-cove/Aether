@@ -71,7 +71,47 @@ export function describeActivity(a) {
       if (a.action === 'attachment_added') return `${who} delivered ${label}`;
       if (a.action === 'attachment_removed') return `${who} removed ${label}`;
       break;
+    case 'vendor':
+      if (a.action === 'created') return `${who} added vendor ${label}`;
+      if (a.action === 'updated') return `${who} updated vendor ${label} ${describeChanges(c)}`;
+      if (a.action === 'deleted') return `${who} deleted vendor ${label}`;
+      if (a.action === 'contact_added') return `${who} added ${c.contact} as a contact at ${label}`;
+      if (a.action === 'contact_removed') return `${who} removed contact ${c.contact} from ${label}`;
+      if (a.action === 'product_linked') return `${who} linked a product to ${label}`;
+      if (a.action === 'product_unlinked') return `${who} unlinked a product from ${label}`;
+      break;
+    case 'returns_import':
+      if (a.action === 'imported') return `${who} imported ${c.rows} ${c.channel} returns (${c.units} units)`;
+      if (a.action === 'deleted') return `${who} undid a returns import (${c.rows} returns)`;
+      break;
+    case 'comparison':
+      if (a.action === 'created') return `${who} started comparison ${label}`;
+      if (a.action === 'deleted') return `${who} deleted comparison ${label}`;
+      if (a.action === 'competitor_added') return `${who} added a competitor to ${label}`;
+      if (a.action === 'competitor_removed') return `${who} removed a competitor from ${label}`;
+      if (a.action === 'attribute_added') return `${who} added row "${c.attribute}" to ${label}`;
+      if (a.action === 'attribute_removed') return `${who} removed row "${c.attribute}"`;
+      if (a.action === 'value_updated') return `${who} set "${c.attribute}" to "${c.value}" in ${label}`;
+      if (a.action === 'updated') return `${who} updated comparison ${label}`;
+      break;
+    case 'competitor':
+      return `${who} ${a.action} competitor ${label}`;
+    case 'sync': {
+      const s = c;
+      const parts = [
+        s.products_created && `${s.products_created} new products`,
+        s.products_linked && `${s.products_linked} linked`,
+        s.products_updated && `${s.products_updated} updated`,
+        s.vendors_created && `${s.vendors_created} new vendors`,
+      ].filter(Boolean);
+      return `Odyssey sync${a.user_name ? ` by ${a.user_name}` : ''}: ${parts.join(', ') || 'changes'}`;
+    }
     case 'product':
+      if (a.action === 'sent_to_odyssey') return `${who} sent ${label} to Odyssey`;
+      if (a.action === 'listing_added') return `${who} added listing ${label}`;
+      if (a.action === 'listing_updated') return `${who} updated listing ${label} ${describeChanges(c)}`;
+      if (a.action === 'listing_removed') return `${who} removed listing ${label}`;
+      if (a.action === 'returns_assigned') return `${who} matched ${c.rows} returns (${label}) to a product`;
       if (a.action === 'variant_added') return `${who} added variant ${label}`;
       if (a.action === 'variant_updated') return `${who} updated variant ${label}`;
       if (a.action === 'variant_removed') return `${who} removed variant ${label}`;
@@ -94,5 +134,9 @@ export function activityLink(a) {
   if (a.entity_type === 'certification') return `/certifications/${a.entity_id}`;
   if (a.entity_type === 'document') return `/manuals/${a.entity_id}`;
   if (a.entity_type === 'design_request') return `/design-requests/${a.entity_id}`;
+  if (a.entity_type === 'vendor') return `/vendors/${a.entity_id}`;
+  if (a.entity_type === 'sync') return '/products';
+  if (a.entity_type === 'returns_import') return '/returns';
+  if (a.entity_type === 'comparison') return `/comparisons/${a.entity_id}`;
   return null;
 }

@@ -55,17 +55,20 @@ export const MODULES = [
   {
     path: '/vendors',
     label: 'Vendors',
+    built: true,
     phase: 3,
     summary: 'Manufacturers, cert labs, packaging and translation vendors, shared with Odyssey.',
   },
   {
     path: '/returns',
+    built: true,
     label: 'Returns',
     phase: 4,
     summary: 'Amazon and TikTok return codes and reasons by product and period, to spot defects and trends.',
   },
   {
     path: '/comparisons',
+    built: true,
     label: 'Comparisons',
     phase: 4,
     summary: 'Competitive analysis of Luna products against what is on the market.',

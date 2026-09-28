@@ -7,6 +7,7 @@ import { isUuid, parse, v } from '../lib/validate.js';
 import { PROJECT_TYPES, STATES } from '../../shared/workflow.js';
 import { getMarket } from '../lib/markets.js';
 import { pruneOrphanAttachments } from '../lib/attachments.js';
+import { messages } from '../lib/notify.js';
 import { getTemplate, listTemplates } from '../lib/templates.js';
 import {
   createProject,
@@ -54,7 +55,7 @@ const logItem = (db, item, action, changes, userId) =>
     userId,
   });
 
-export function projectRoutes({ db, files }) {
+export function projectRoutes({ db, files, notify }) {
   const router = Router();
   const cleanupFiles = async () => {
     const keys = await pruneOrphanAttachments(db);
@@ -139,6 +140,7 @@ export function projectRoutes({ db, files }) {
       const before = await loadProject(db, req.params.id);
       const fields = parse(req.body, PROJECT_FIELDS);
       const project = await updateProject(db, before.id, fields);
+      if (fields.state === 'done' && before.state !== 'done') notify?.send(messages.projectDone(notify, { project, who: req.user.name || req.user.email }));
       const changes = diff(before, fields, Object.keys(fields));
       if (Object.keys(changes).length) {
         await logActivity(db, {
@@ -210,6 +212,10 @@ export function projectRoutes({ db, files }) {
       const before = await loadItem(db, req.params.id);
       const fields = parse(req.body, ITEM_FIELDS);
       const item = await updateItem(db, before, fields);
+      if (fields.state === 'blocked' && before.state !== 'blocked' && notify?.enabled) {
+        const project = await getProject(db, item.project_id);
+        notify.send(messages.itemBlocked(notify, { item, project, who: req.user.name || req.user.email }));
+      }
       const changes = diff(before, fields, Object.keys(fields).filter((k) => k !== 'position'));
       if (Object.keys(changes).length) await logItem(db, item, 'item_updated', changes, req.user.id);
       res.json({ item });

@@ -11,6 +11,8 @@ export function authRoutes({ db, config, passport }) {
   const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 20,
+    // Only failed attempts count, so a team behind one office IP isn't locked out by normal sign-ins.
+    skipSuccessfulRequests: true,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { error: 'Too many sign-in attempts. Try again in a few minutes.' },
@@ -23,6 +25,7 @@ export function authRoutes({ db, config, passport }) {
     res.json({
       user: req.isAuthenticated() ? publicUser(req.user) : null,
       providers: { google: config.google.enabled, password: true },
+      env: config.appEnv,
     });
   });
 

@@ -5,14 +5,14 @@ import { hasRole } from '../../../shared/roles.js';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [state, setState] = useState({ loading: true, user: null, providers: {} });
+  const [state, setState] = useState({ loading: true, user: null, providers: {}, env: null });
 
   const refresh = useCallback(async () => {
     try {
-      const { user, providers } = await api('/api/me');
-      setState({ loading: false, user, providers });
+      const { user, providers, env } = await api('/api/me');
+      setState({ loading: false, user, providers, env });
     } catch {
-      setState({ loading: false, user: null, providers: {} });
+      setState({ loading: false, user: null, providers: {}, env: null });
     }
   }, []);
 

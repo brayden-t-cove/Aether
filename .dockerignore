@@ -1,0 +1,9 @@
+node_modules
+client/dist
+.env
+.env.*
+.files
+.git
+coverage
+test-results
+playwright-report

@@ -8,6 +8,7 @@ import { isUuid, parse } from '../lib/validate.js';
 import { pruneOrphanAttachments, withAttachments } from '../lib/attachments.js';
 import { getVariant } from '../lib/variants.js';
 import { listRequests } from '../lib/requests.js';
+import { messages } from '../lib/notify.js';
 import {
   createDocument,
   createVersion,
@@ -44,7 +45,13 @@ async function assertVariantOf(db, variantId, productId) {
 
 const logDoc = (db, docId, action, changes, userId) => logActivity(db, { entityType: 'document', entityId: docId, action, changes, userId });
 
-export function documentRoutes({ db, files }) {
+export function documentRoutes({ db, files, notify }) {
+  const announce = async (req, docId, version, previous) => {
+    if (!notify?.enabled || version.state === previous) return;
+    const doc = await getDocument(db, docId);
+    if (version.state === 'in_review') notify.send(messages.versionReview(notify, { doc, version, who: req.user.name || req.user.email }));
+    if (version.state === 'approved') notify.send(messages.versionApproved(notify, { doc, version, who: req.user.name || req.user.email }));
+  };
   const router = Router();
   const cleanupFiles = async () => {
     const keys = await pruneOrphanAttachments(db);
@@ -135,6 +142,7 @@ export function documentRoutes({ db, files }) {
       const fields = parse(req.body, VERSION_FIELDS);
       if (!fields.version) fields.version = await nextVersionLabel(db, doc.id);
       const version = await createVersion(db, doc.id, fields, req.user.id);
+      await announce(req, doc.id, version, null);
       await logDoc(db, doc.id, 'version_added', { label: doc.title, version: version.version, state: version.state }, req.user.id);
       res.status(201).json({ version });
     }),
@@ -147,6 +155,7 @@ export function documentRoutes({ db, files }) {
       const before = await loadVersion(db, req.params.id);
       const fields = parse(req.body, VERSION_FIELDS);
       const version = await updateVersion(db, before, fields, req.user.id);
+      await announce(req, before.document_id, version, before.state);
       const changes = diff(before, fields, Object.keys(fields));
       if (Object.keys(changes).length) {
         const doc = await getDocument(db, before.document_id);

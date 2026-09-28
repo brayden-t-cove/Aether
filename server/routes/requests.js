@@ -6,6 +6,7 @@ import { listActivity, logActivity } from '../lib/activity.js';
 import { diff } from '../lib/db.js';
 import { isUuid, parse } from '../lib/validate.js';
 import { pruneOrphanAttachments, withAttachments } from '../lib/attachments.js';
+import { messages } from '../lib/notify.js';
 import { createRequest, deleteRequest, getRequest, listRequests, REQUEST_FIELDS, updateRequest } from '../lib/requests.js';
 
 async function loadRequest(db, id) {
@@ -16,7 +17,7 @@ async function loadRequest(db, id) {
 
 const log = (db, id, action, changes, userId) => logActivity(db, { entityType: 'design_request', entityId: id, action, changes, userId });
 
-export function requestRoutes({ db, files }) {
+export function requestRoutes({ db, files, notify }) {
   const router = Router();
 
   router.get(
@@ -51,7 +52,9 @@ export function requestRoutes({ db, files }) {
       const fields = parse(req.body, REQUEST_FIELDS, { required: ['title'] });
       const id = await createRequest(db, fields, req.user.id);
       await log(db, id, 'created', { label: fields.title }, req.user.id);
-      res.status(201).json({ request: await getRequest(db, id) });
+      const request = await getRequest(db, id);
+      notify?.send(messages.requestCreated(notify, { request, who: req.user.name || req.user.email }));
+      res.status(201).json({ request });
     }),
   );
 
@@ -62,6 +65,9 @@ export function requestRoutes({ db, files }) {
       const before = await loadRequest(db, req.params.id);
       const fields = parse(req.body, REQUEST_FIELDS);
       await updateRequest(db, before.id, fields);
+      if (fields.state === 'delivered' && before.state !== 'delivered') {
+        notify?.send(messages.requestDelivered(notify, { request: await getRequest(db, before.id), who: req.user.name || req.user.email }));
+      }
       const changes = diff(before, fields, Object.keys(fields));
       if (Object.keys(changes).length) await log(db, before.id, 'updated', { ...changes, label: fields.title ?? before.title }, req.user.id);
       res.json({ request: await getRequest(db, before.id) });

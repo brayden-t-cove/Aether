@@ -7,6 +7,7 @@ import { diff } from '../lib/db.js';
 import { isUuid, parse } from '../lib/validate.js';
 import { pruneOrphanAttachments, withAttachments } from '../lib/attachments.js';
 import { getVariant } from '../lib/variants.js';
+import { messages } from '../lib/notify.js';
 import {
   CERT_FIELDS,
   createCertification,
@@ -30,7 +31,7 @@ async function assertVariantOf(db, variantId, productId) {
 
 const label = (c) => `${c.product_name} · ${c.mark} (${c.market_code})`;
 
-export function certificationRoutes({ db, files }) {
+export function certificationRoutes({ db, files, notify }) {
   const router = Router();
 
   router.get(
@@ -80,6 +81,9 @@ export function certificationRoutes({ db, files }) {
       await assertVariantOf(db, fields.variant_id, fields.product_id ?? before.product_id);
       await updateCertification(db, before.id, fields);
       const cert = await getCertification(db, before.id);
+      if (['certified', 'rejected'].includes(fields.state) && fields.state !== before.state) {
+        notify?.send(messages.certChanged(notify, { cert, state: fields.state, who: req.user.name || req.user.email }));
+      }
       const changes = diff(before, fields, Object.keys(fields));
       if (Object.keys(changes).length) {
         await logActivity(db, { entityType: 'certification', entityId: cert.id, action: 'updated', changes: { ...changes, label: label(cert) }, userId: req.user.id });

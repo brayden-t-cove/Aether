@@ -21,6 +21,14 @@ import { requestRoutes } from './routes/requests.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { readinessRoutes } from './routes/readiness.js';
 import { createFileStore } from './lib/files.js';
+import { createOdysseyClient } from './lib/odyssey.js';
+import { vendorRoutes } from './routes/vendors.js';
+import { odysseyRoutes } from './routes/odyssey.js';
+import { listingRoutes } from './routes/listings.js';
+import { returnRoutes } from './routes/returns.js';
+import { comparisonRoutes } from './routes/comparisons.js';
+import { integrationRoutes } from './routes/integrations.js';
+import { createNotifier } from './lib/notify.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLIENT_DIST = join(ROOT, 'client', 'dist');
@@ -30,7 +38,7 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Build the Express app. `db` is a pg Pool. Kept separate from index.js so
  * tests can create an app against a test database.
  */
-export function createApp({ db, config }) {
+export function createApp({ db, config, odyssey = createOdysseyClient(config.odyssey), notify = createNotifier(config) }) {
   const app = express();
   const passport = configurePassport(db, config);
   const files = createFileStore(config);
@@ -57,7 +65,7 @@ export function createApp({ db, config }) {
     }
   });
 
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(
     session({
       name: 'aether.sid',
@@ -81,15 +89,21 @@ export function createApp({ db, config }) {
   app.use(activityRoutes({ db }));
   app.use(productRoutes({ db, files }));
   app.use(marketRoutes({ db }));
-  app.use(projectRoutes({ db, files }));
+  app.use(projectRoutes({ db, files, notify }));
   app.use(dashboardRoutes({ db }));
   app.use(importRoutes({ db }));
-  app.use(certificationRoutes({ db, files }));
+  app.use(certificationRoutes({ db, files, notify }));
   app.use(variantRoutes({ db }));
-  app.use(documentRoutes({ db, files }));
-  app.use(requestRoutes({ db, files }));
+  app.use(documentRoutes({ db, files, notify }));
+  app.use(requestRoutes({ db, files, notify }));
   app.use(attachmentRoutes({ db, files }));
   app.use(readinessRoutes({ db }));
+  app.use(vendorRoutes({ db }));
+  app.use(odysseyRoutes({ db, odyssey }));
+  app.use(listingRoutes({ db }));
+  app.use(returnRoutes({ db, notify }));
+  app.use(comparisonRoutes({ db }));
+  app.use(integrationRoutes({ db, config, odyssey, notify, files }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 
