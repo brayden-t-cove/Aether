@@ -64,8 +64,12 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 5: notifications, digest, integration
   it('never breaks a request when Slack is down', async () => {
     slack.state.fail = true;
     const before = slack.messages.length;
+    const refused = slack.state.refused;
     const { body: p } = await editor.agent.post('/api/projects').send({ name: 'Still works' }).expect(201);
     await editor.agent.patch(`/api/projects/${p.project.id}`).send({ state: 'done' }).expect(200);
+    // The post is sent in the background: wait until Slack has refused it, or it could land after this test.
+    for (let i = 0; i < 100 && slack.state.refused === refused; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(slack.state.refused).toBe(refused + 1);
     slack.state.fail = false;
     expect(slack.messages.length).toBe(before);
   });
@@ -79,7 +83,10 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 5: notifications, digest, integration
     const msgs = await slack.waitFor(start + 1);
     expect(msgs.at(-1)).toMatch(/Aether daily digest/);
     expect(msgs.at(-1)).toMatch(/\*Blocked \(1\)\*\n• .*MP samples from the factory/);
+    const sent = msgs.length;
     expect(await maybeSendDigest(db, notifier, { hourUtc: 14, now: new Date('2026-09-26T15:00:00Z') })).toBe(true);
+    // Let the second digest land here rather than during the next test.
+    expect((await slack.waitFor(sent + 1)).length).toBe(sent + 1);
   });
 
   it('shows admins what is connected, without secrets, and has test buttons', async () => {

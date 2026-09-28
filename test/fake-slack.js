@@ -3,11 +3,14 @@ import express from 'express';
 
 export async function startFakeSlack() {
   const messages = [];
-  const state = { fail: false };
+  const state = { fail: false, refused: 0 };
   const app = express();
   app.use(express.json());
   app.post('/hook', (req, res) => {
-    if (state.fail) return res.status(500).send('no');
+    if (state.fail) {
+      state.refused++;
+      return res.status(500).send('no');
+    }
     messages.push(req.body.text);
     res.send('ok');
   });
