@@ -41,6 +41,9 @@ function odysseyKeys(o) {
     .filter(Boolean);
 }
 
+/** Whether a product other than exceptId already uses this model (matching the case-insensitive unique index). */
+const modelTaken = (products, model, exceptId) => products.some((p) => p.id !== exceptId && lower(p.model) === model.toLowerCase());
+
 async function syncProducts(tx, items, stats) {
   const { rows: existing } = await tx.query('SELECT id, name, model, source, odyssey_id FROM products');
   const byOdysseyId = new Map(existing.filter((p) => p.odyssey_id).map((p) => [p.odyssey_id, p]));
@@ -73,6 +76,8 @@ async function syncProducts(tx, items, stats) {
 
     if (product) {
       if (product.source === 'odyssey') {
+        // Models are unique: if another product already has this one, the synced product keeps its current model.
+        if (fields.model && modelTaken(existing, fields.model, product.id)) fields.model = product.model;
         const { rowCount } = await tx.query(
           `UPDATE products SET name = $2, model = $3, manufacturer = $4, category = $5, lifecycle = $6, synced_at = now(), updated_at = now()
             WHERE id = $1 AND (name, COALESCE(model, ''), manufacturer, category, lifecycle) IS DISTINCT FROM ($2, COALESCE($3, ''), $4, $5, $6)`,
@@ -80,6 +85,7 @@ async function syncProducts(tx, items, stats) {
         );
         if (rowCount) stats.products_updated++;
         else await tx.query('UPDATE products SET synced_at = now() WHERE id = $1', [product.id]);
+        Object.assign(product, { name: fields.name, model: fields.model });
       } else {
         await tx.query('UPDATE products SET synced_at = now() WHERE id = $1', [product.id]);
       }
@@ -87,13 +93,13 @@ async function syncProducts(tx, items, stats) {
       continue;
     }
 
-    // A model already used by an Aether product can't be reused (unique index); keep the synced one without it.
-    const modelTaken = fields.model && existing.some((p) => lower(p.model) === fields.model.toLowerCase());
+    // A model already used by another product can't be reused (unique index); keep the synced one without it.
+    const taken = fields.model && modelTaken(existing, fields.model);
     const { rows } = await tx.query(
       `INSERT INTO products (name, model, manufacturer, category, lifecycle, source, odyssey_id, synced_at)
        VALUES ($1, $2, $3, $4, $5, 'odyssey', $6, now())
        RETURNING id, name, model, source, odyssey_id`,
-      [fields.name, modelTaken ? null : fields.model, fields.manufacturer, fields.category, fields.lifecycle, odysseyId],
+      [fields.name, taken ? null : fields.model, fields.manufacturer, fields.category, fields.lifecycle, odysseyId],
     );
     existing.push(rows[0]);
     byOdysseyId.set(odysseyId, rows[0]);
@@ -159,12 +165,16 @@ async function syncVendors(tx, vendors, stats) {
     }
 
     if (vendor) {
+      // Vendor names are unique: if Odyssey renamed it to a name another vendor has, keep the current name.
+      const nameTaken = existing.some((v) => v.id !== vendor.id && v.name.toLowerCase() === name.toLowerCase());
+      const newName = nameTaken ? vendor.name : name;
       const { rowCount } = await tx.query(
         `UPDATE vendors SET name = $2, status = $3, website = $4, notes = $5, synced_at = now(), updated_at = now()
           WHERE id = $1 AND (name, status, website, notes) IS DISTINCT FROM ($2, $3, $4, $5)`,
-        [vendor.id, name, status, clean(o.website), clean(o.notes)],
+        [vendor.id, newName, status, clean(o.website), clean(o.notes)],
       );
       if (rowCount) stats.vendors_updated++;
+      vendor.name = newName;
     } else {
       const { rows } = await tx.query(
         `INSERT INTO vendors (name, type, status, website, notes, source, odyssey_id, synced_at)
