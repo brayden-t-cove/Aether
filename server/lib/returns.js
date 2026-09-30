@@ -49,8 +49,10 @@ export async function listReturns(db, { limit = 200, ...opts } = {}) {
   const { where, params } = filters(opts);
   params.push(Math.min(Math.max(Number(limit) || 200, 1), 1000));
   const { rows } = await db.query(
-    `SELECT r.*, r.return_date::text AS return_date, p.name AS product_name, m.code AS market_code
+    `SELECT r.*, r.return_date::text AS return_date, p.name AS product_name, m.code AS market_code,
+            c.key AS category_key, c.name AS category_name, s.key AS subreason_key, s.name AS subreason_name
        FROM returns r LEFT JOIN products p ON p.id = r.product_id LEFT JOIN markets m ON m.id = r.market_id
+       LEFT JOIN return_categories c ON c.id = r.category_id LEFT JOIN return_subreasons s ON s.id = r.subreason_id
       ${where}
       ORDER BY r.return_date DESC, r.created_at DESC
       LIMIT $${params.length}`,

@@ -8,6 +8,7 @@ import { isUuid, parse, v } from '../lib/validate.js';
 import { MAX_RETURN_ROWS, planReturnsImport, runReturnsImport } from '../lib/returnsImport.js';
 import { messages } from '../lib/notify.js';
 import { assignReturns, listReturns, returnsSummary, unmatchedReturns } from '../lib/returns.js';
+import { getCodebook } from '../lib/returnCodebook.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -43,6 +44,12 @@ export function returnRoutes({ db, notify }) {
     '/api/returns',
     requireAuth,
     asyncHandler(async (req, res) => res.json({ returns: await listReturns(db, { ...readFilters(req.query), limit: req.query.limit }) })),
+  );
+
+  router.get(
+    '/api/returns/codebook',
+    requireAuth,
+    asyncHandler(async (req, res) => res.json({ categories: await getCodebook(db) })),
   );
 
   router.get(
