@@ -9,6 +9,7 @@ import { MAX_RETURN_ROWS, planReturnsImport, runReturnsImport } from '../lib/ret
 import { messages } from '../lib/notify.js';
 import { assignReturns, listReturns, returnsSummary, unmatchedReturns } from '../lib/returns.js';
 import { getCodebook } from '../lib/returnCodebook.js';
+import { sortReturns } from '../lib/returnRules.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -109,6 +110,17 @@ export function returnRoutes({ db, notify }) {
       });
       await logActivity(db, { entityType: 'returns_import', entityId: imp.id, action: 'deleted', changes: { label: imp.filename || imp.channel, rows: imp.created_count }, userId: req.user.id });
       res.json({ ok: true });
+    }),
+  );
+
+  // Re-run the keyword rules on every return a person hasn't sorted by hand.
+  router.post(
+    '/api/returns/sort',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const result = await sortReturns(db);
+      await logActivity(db, { entityType: 'returns', entityId: 'all', action: 'sorted', changes: result, userId: req.user.id });
+      res.json(result);
     }),
   );
 

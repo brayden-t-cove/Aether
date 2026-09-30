@@ -11,6 +11,7 @@
  */
 import { AMAZON_REASONS } from '../../shared/workflow.js';
 import { logActivity } from './activity.js';
+import { sortReturns } from './returnRules.js';
 
 export const MAX_RETURN_ROWS = 20_000;
 
@@ -211,6 +212,7 @@ export async function runReturnsImport(tx, plan, { filename = '', userId }) {
     );
     created += rowCount;
   }
+  const sorting = await sortReturns(tx, { importId });
   const duplicates = plan.rows.filter((r) => r.action === 'duplicate').length + (plan.summary.create - created);
   const { rows } = await tx.query(
     'UPDATE return_imports SET created_count = $2, duplicate_count = $3, unmatched_count = $4 WHERE id = $1 RETURNING *',
@@ -220,7 +222,7 @@ export async function runReturnsImport(tx, plan, { filename = '', userId }) {
     entityType: 'returns_import',
     entityId: importId,
     action: 'imported',
-    changes: { channel: plan.channel, rows: created, units: plan.summary.units, label: filename || plan.channel },
+    changes: { channel: plan.channel, rows: created, units: plan.summary.units, label: filename || plan.channel, ...sorting },
     userId,
   });
   return rows[0];
