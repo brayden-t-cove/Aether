@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CHANNELS } from '../../../shared/workflow.js';
+import { CHANNELS, RETURN_FLAGS } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
@@ -27,6 +27,88 @@ function CodebookSelect({ codebook, value, onChange, label }) {
         </optgroup>
       ))}
     </select>
+  );
+}
+
+/** The four flags. Editors switch them on and off; everyone else sees the ones that are on. */
+function Flags({ r, editable, onSaved }) {
+  const [error, setError] = useState(null);
+  const on = new Set(r.flags);
+  async function toggle(flag) {
+    setError(null);
+    try {
+      await api(`/api/returns/${r.id}/flags/${flag}`, { method: 'PUT', body: { on: !on.has(flag) } });
+      onSaved();
+    } catch (err) {
+      setError(err);
+    }
+  }
+  if (!editable) {
+    return on.size ? (
+      <div className="chips">
+        {[...on].map((f) => (
+          <span key={f} className="tag">
+            {RETURN_FLAGS[f]}
+          </span>
+        ))}
+      </div>
+    ) : null;
+  }
+  return (
+    <>
+      <div className="chips" role="group" aria-label="Flags">
+        {Object.entries(RETURN_FLAGS).map(([key, label]) => (
+          <button key={key} type="button" className={`chip ${on.has(key) ? 'chip-on' : ''}`} aria-pressed={on.has(key)} onClick={() => toggle(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <ErrorNote error={error} />
+    </>
+  );
+}
+
+/** Other categories the buyer also mentions. */
+function Secondary({ r, codebook, editable, onSaved }) {
+  const [error, setError] = useState(null);
+  const names = new Map(codebook.map((c) => [c.key, c.name]));
+  const choices = codebook.filter((c) => c.in_share && c.key !== r.category_key && !r.secondary.includes(c.key));
+  async function save(keys) {
+    setError(null);
+    try {
+      await api(`/api/returns/${r.id}/secondary`, { method: 'PUT', body: { categories: keys } });
+      onSaved();
+    } catch (err) {
+      setError(err);
+    }
+  }
+  if (!editable && !r.secondary.length) return null;
+  return (
+    <div className="small">
+      <span className="muted">Also about: </span>
+      {r.secondary.map((k) => (
+        <span key={k} className="tag">
+          {names.get(k)}
+          {editable && (
+            <button type="button" className="link-btn" aria-label={`Remove ${names.get(k)}`} onClick={() => save(r.secondary.filter((x) => x !== k))}>
+              {' '}
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      {editable && (
+        <select aria-label="Add another category" value="" onChange={(e) => e.target.value && save([...r.secondary, e.target.value])}>
+          <option value="">{r.secondary.length ? 'Add…' : 'Nothing else. Add…'}</option>
+          {choices.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      )}
+      <ErrorNote error={error} />
+    </div>
   );
 }
 
@@ -59,6 +141,7 @@ function ReturnRow({ r, view, codebook, editable, onSaved }) {
       <td>
         {r.note_clean}
         {r.reason && <div className="muted small">Platform reason: {r.reason}</div>}
+        <Flags r={r} editable={editable} onSaved={onSaved} />
       </td>
       {view === 'unreviewed' && (
         <td>
@@ -84,6 +167,7 @@ function ReturnRow({ r, view, codebook, editable, onSaved }) {
             )}
           </div>
           <ErrorNote error={error} />
+          <Secondary r={r} codebook={codebook} editable={editable} onSaved={onSaved} />
         </td>
       )}
     </tr>
@@ -95,7 +179,8 @@ export default function ReturnsReviewPage() {
   const [params, setParams] = useSearchParams();
   const view = VIEWS[params.get('view')] ? params.get('view') : 'unsorted';
   const channel = params.get('channel') || '';
-  const query = new URLSearchParams({ view, ...(channel && { channel }) });
+  const flag = RETURN_FLAGS[params.get('flag')] ? params.get('flag') : '';
+  const query = new URLSearchParams({ view, ...(channel && { channel }), ...(flag && { flag }) });
   const { data, error, reload } = useLoad(`/api/returns/review?${query}`);
   const { data: codebook } = useLoad('/api/returns/codebook');
   const editable = can('editor');
@@ -139,6 +224,17 @@ export default function ReturnsReviewPage() {
           <select value={channel} onChange={(e) => set('channel', e.target.value)}>
             <option value="">All</option>
             {Object.entries(CHANNELS).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="inline">
+          Flag
+          <select aria-label="Filter by flag" value={flag} onChange={(e) => set('flag', e.target.value)}>
+            <option value="">Any or none</option>
+            {Object.entries(RETURN_FLAGS).map(([k, label]) => (
               <option key={k} value={k}>
                 {label}
               </option>
