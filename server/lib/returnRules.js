@@ -175,26 +175,29 @@ export function sortReturn({ channel, reason_code = '', reason = '', customer_co
 }
 
 /**
- * Re-run the rules on every return not sorted by a person (or only one import's returns).
+ * Re-run the rules on every return not sorted by a person (or only one import's returns, or the given ids).
  * → { sorted, unsorted }: how many got a category, and how many the rules couldn't place.
  */
-export async function sortReturns(db, { importId } = {}) {
+export async function sortReturns(db, { importId, ids } = {}) {
   const codebook = await getCodebook(db);
   const rank = new Map(codebook.map((c) => [c.key, c.tie_break_rank ?? Infinity]));
-  const ids = new Map(codebook.flatMap((c) => c.subreasons.map((s) => [`${c.key}/${s.key}`, [c.id, s.id]])));
+  const codebookIds = new Map(codebook.flatMap((c) => c.subreasons.map((s) => [`${c.key}/${s.key}`, [c.id, s.id]])));
 
   const params = [];
   let where = "category_source <> 'manual'";
   if (importId) {
     params.push(importId);
     where += ' AND import_id = $1';
+  } else if (ids) {
+    params.push(ids);
+    where += ' AND id = ANY($1::uuid[])';
   }
   const { rows } = await db.query(`SELECT id, channel, reason_code, reason, customer_comment FROM returns WHERE ${where}`, params);
 
   const cols = { id: [], category: [], subreason: [], source: [], why: [], note: [] };
   for (const r of rows) {
     const s = sortReturn(r, { rank });
-    const [categoryId, subreasonId] = s.category ? ids.get(`${s.category}/${s.subreason}`) : [null, null];
+    const [categoryId, subreasonId] = s.category ? codebookIds.get(`${s.category}/${s.subreason}`) : [null, null];
     cols.id.push(r.id);
     cols.category.push(categoryId);
     cols.subreason.push(subreasonId);
