@@ -134,6 +134,14 @@ export const REASON_GROUPS = {
   other: 'Other',
 };
 
+/** Flags that ride alongside a return's category, in the returns codebook. */
+export const RETURN_FLAGS = {
+  support_unresolved: 'Support contacted, unresolved',
+  cites_claim: 'Cites listing / Live / ad claim',
+  all_units: 'Multi-unit / all units affected',
+  looks_used: 'Looks used / previously returned',
+};
+
 /** Amazon customer-return reason codes → readable label and group. */
 export const AMAZON_REASONS = {
   DEFECTIVE: ['Defective / does not work', 'defect'],

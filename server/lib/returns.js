@@ -1,6 +1,6 @@
 /** Returns analytics: totals, monthly trend by channel, reasons, and per-product breakdown. */
 
-function filters({ from, to, channel, productId, marketId }) {
+function filters({ from, to, channel, productId, marketId, flag }) {
   const where = [];
   const params = [];
   const add = (sql, value) => {
@@ -12,6 +12,7 @@ function filters({ from, to, channel, productId, marketId }) {
   if (channel) add('r.channel = ?', channel);
   if (productId) add('r.product_id = ?', productId);
   if (marketId) add('r.market_id = ?', marketId);
+  if (flag) add('EXISTS (SELECT 1 FROM return_flags f WHERE f.return_id = r.id AND f.flag = ? AND f.active)', flag);
   return { where: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
 }
 
@@ -45,12 +46,17 @@ export async function returnsSummary(db, opts = {}) {
   return { totals: totals[0], byMonth, byGroup, topReasons, byProduct };
 }
 
+// A return's active flags and secondary category keys, as arrays.
+const EXTRAS = `ARRAY(SELECT f.flag FROM return_flags f WHERE f.return_id = r.id AND f.active ORDER BY f.flag) AS flags,
+  ARRAY(SELECT sc.key FROM return_secondary_categories x JOIN return_categories sc ON sc.id = x.category_id
+         WHERE x.return_id = r.id ORDER BY sc.sort_order) AS secondary`;
+
 export async function listReturns(db, { limit = 200, ...opts } = {}) {
   const { where, params } = filters(opts);
   params.push(Math.min(Math.max(Number(limit) || 200, 1), 1000));
   const { rows } = await db.query(
     `SELECT r.*, r.return_date::text AS return_date, p.name AS product_name, m.code AS market_code,
-            c.key AS category_key, c.name AS category_name, s.key AS subreason_key, s.name AS subreason_name
+            c.key AS category_key, c.name AS category_name, s.key AS subreason_key, s.name AS subreason_name, ${EXTRAS}
        FROM returns r LEFT JOIN products p ON p.id = r.product_id LEFT JOIN markets m ON m.id = r.market_id
        LEFT JOIN return_categories c ON c.id = r.category_id LEFT JOIN return_subreasons s ON s.id = r.subreason_id
       ${where}
@@ -107,12 +113,16 @@ const REVIEW_VIEWS = {
 export const REVIEW_VIEW_KEYS = Object.keys(REVIEW_VIEWS);
 
 /** Returns waiting on a person, newest first, with counts for the progress line. */
-export async function reviewQueue(db, { view = 'unsorted', channel, limit = 200 } = {}) {
+export async function reviewQueue(db, { view = 'unsorted', channel, flag, limit = 200 } = {}) {
   const params = [];
   const where = [];
   if (channel) {
     params.push(channel);
     where.push(`r.channel = $${params.length}`);
+  }
+  if (flag) {
+    params.push(flag);
+    where.push(`EXISTS (SELECT 1 FROM return_flags f WHERE f.return_id = r.id AND f.flag = $${params.length} AND f.active)`);
   }
   const scope = where.length ? `AND ${where.join(' AND ')}` : '';
   const from = `FROM returns r LEFT JOIN return_categories c ON c.id = r.category_id`;
@@ -128,7 +138,7 @@ export async function reviewQueue(db, { view = 'unsorted', channel, limit = 200 
   const { rows } = await db.query(
     `SELECT r.id, r.channel, r.return_date::text AS return_date, r.return_ref, r.order_ref, r.product_label, p.name AS product_name,
             r.quantity, r.reason, r.note_clean, r.category_source, r.category_why,
-            c.key AS category_key, c.name AS category_name, s.key AS subreason_key, s.name AS subreason_name
+            c.key AS category_key, c.name AS category_name, s.key AS subreason_key, s.name AS subreason_name, ${EXTRAS}
        ${from} LEFT JOIN return_subreasons s ON s.id = r.subreason_id LEFT JOIN products p ON p.id = r.product_id
       WHERE ${REVIEW_VIEWS[view]} ${scope}
       ORDER BY r.return_date DESC, r.created_at DESC
@@ -163,4 +173,43 @@ export async function setReturnCategory(db, { id, category, subreason, userId })
     [id, pick.category_id, pick.subreason_id, userId],
   );
   return { confirmed: before.subreason_id === pick.subreason_id, from: before.label, to: pick.label, label: before.product_label || before.return_ref };
+}
+
+const returnLabel = async (db, id) =>
+  (await db.query("SELECT COALESCE(NULLIF(product_label, ''), return_ref) AS label FROM returns WHERE id = $1", [id])).rows[0]?.label;
+
+/** A person turns a flag on or off. The rules leave it that way. → the return's label, or null if not found. */
+export async function setReturnFlag(db, { id, flag, on, userId }) {
+  const label = await returnLabel(db, id);
+  if (label === undefined) return null;
+  await db.query(
+    `INSERT INTO return_flags (return_id, flag, source, active, set_by) VALUES ($1, $2, 'manual', $3, $4)
+     ON CONFLICT (return_id, flag) DO UPDATE SET source = 'manual', active = EXCLUDED.active, set_by = EXCLUDED.set_by, created_at = now()`,
+    [id, flag, on, userId],
+  );
+  return { label };
+}
+
+/**
+ * Replace a return's secondary categories (codebook keys). The main category and set-aside or
+ * no-comment categories are left out. → { label, names }, { invalid } for an unknown key, or null if not found.
+ */
+export async function setSecondaryCategories(db, { id, categories, userId }) {
+  const label = await returnLabel(db, id);
+  if (label === undefined) return null;
+  const { rows: picked } = await db.query(
+    `SELECT c.id, c.key, c.name FROM return_categories c
+      WHERE c.key = ANY($1::text[]) AND c.in_share
+        AND c.id IS DISTINCT FROM (SELECT category_id FROM returns WHERE id = $2)
+      ORDER BY c.sort_order`,
+    [categories, id],
+  );
+  const { rows: known } = await db.query('SELECT key FROM return_categories WHERE key = ANY($1::text[])', [categories]);
+  if (known.length !== new Set(categories).size) return { invalid: true };
+  await db.query('DELETE FROM return_secondary_categories WHERE return_id = $1', [id]);
+  await db.query(
+    `INSERT INTO return_secondary_categories (return_id, category_id, added_by) SELECT $1, unnest($2::uuid[]), $3`,
+    [id, picked.map((c) => c.id), userId],
+  );
+  return { label, names: picked.map((c) => c.name) };
 }
