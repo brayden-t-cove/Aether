@@ -20,6 +20,7 @@ describe('suggesting flags from a note', () => {
   it('does not mistake the camera’s live view for a TikTok Live claim', () => {
     expect(suggestFlags('Live view takes forever to load')).toEqual([]);
     expect(suggestFlags('The host on the TikTok Live said it works outside')).toEqual(['cites_claim']);
+    expect(suggestFlags('This was supposed to be a camera with no fees. Marketing fraud')).toEqual(['cites_claim']);
   });
 
   it('suggests nothing for an empty note', () => {
