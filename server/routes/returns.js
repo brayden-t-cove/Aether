@@ -26,6 +26,7 @@ function readFilters(q) {
 // The browser only needs a sample of rows to preview; the full plan is rebuilt on import.
 const publicPlan = (plan) => ({
   grouped: Boolean(plan.grouped),
+  dateOrder: plan.dateOrder ?? null,
   summary: plan.summary,
   unmatched: plan.unmatched.slice(0, 50),
   rows: plan.rows.slice(0, 200).map(({ line, action, error, reason_dup, return_date, order_ref, sku, external_id, product_label, quantity, reason, reason_group, product_name }) => ({

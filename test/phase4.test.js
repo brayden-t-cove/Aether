@@ -11,10 +11,10 @@ const AMAZON = [
   { 'return-date': '2026-09-05', 'order-id': '111-5', sku: 'W4-SKU', 'product-name': 'Luna W4 window camera', quantity: '1', reason: 'NOT_AS_DESCRIBED', 'license-plate-number': 'LPN5' },
 ];
 
-// Shaped like a TikTok Shop returns export: free-text reasons, no license plate.
+// Shaped like a TikTok Shop returns export: free-text reasons, no license plate, dates day first.
 const TIKTOK = [
-  { 'Order ID': 'TT-1', 'Return Order ID': 'R-1', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': "Product doesn't work", 'Time Requested': '09/10/2026 08:00:00' },
-  { 'Order ID': 'TT-2', 'Return Order ID': 'R-2', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': 'No longer needed', 'Time Requested': '09/12/2026 08:00:00' },
+  { 'Order ID': 'TT-1', 'Return Order ID': 'R-1', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': "Product doesn't work", 'Time Requested': '10/09/2026 08:00:00' },
+  { 'Order ID': 'TT-2', 'Return Order ID': 'R-2', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': 'No longer needed', 'Time Requested': '12/09/2026 08:00:00' },
 ];
 
 describe('returns parsing helpers', () => {
