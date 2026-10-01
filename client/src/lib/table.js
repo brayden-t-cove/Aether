@@ -48,3 +48,19 @@ export function parseImportJson(text) {
   if (Array.isArray(data)) return { products: data, projects: [] };
   return { products: data.products || [], projects: data.projects || [] };
 }
+
+/**
+ * A file's text. Most exports are UTF-8; Amazon's reports are Windows-1252, which would garble
+ * accents and curly quotes if read as UTF-8, so fall back to it when the bytes aren't valid UTF-8.
+ */
+export async function readText(file) {
+  return decodeText(await file.arrayBuffer());
+}
+
+export function decodeText(buffer) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer);
+  }
+}

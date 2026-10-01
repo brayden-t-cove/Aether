@@ -2,6 +2,10 @@
  * Import returns from marketplace reports: Amazon's FBA customer returns
  * report, TikTok Shop's returns export, or any CSV with similar columns.
  *
+ * Amazon's report has one row per returned unit. Those are grouped into one
+ * return per order (with each unit kept in return_units), so a return means
+ * the same thing on every channel.
+ *
  * Like the product importer, planReturnsImport() never writes, and
  * runReturnsImport() applies the same plan. Rows are matched to products by
  * listing (ASIN / TikTok product ID / SKU), then product SKU, model, and
@@ -11,7 +15,7 @@
  */
 import { AMAZON_REASONS } from '../../shared/workflow.js';
 import { logActivity } from './activity.js';
-import { sortReturns } from './returnRules.js';
+import { cleanNote, sortReturns } from './returnRules.js';
 
 export const MAX_RETURN_ROWS = 20_000;
 
@@ -34,6 +38,10 @@ const HEADERS = {
   customer_comment: ['customercomments', 'customercomment', 'comments', 'buyercomment', 'buyercomments', 'returnreasondetails', 'buyernote'],
   disposition: ['detaileddisposition', 'disposition', 'condition', 'itemcondition'],
   status: ['status', 'returnstatus', 'refundstatus'],
+  // Amazon's unit-level columns.
+  license_plate: ['licenseplatenumber', 'lpn'],
+  fnsku: ['fnsku'],
+  fulfillment_center: ['fulfillmentcenterid', 'fulfillmentcenter'],
 };
 
 function pick(row, field) {
@@ -117,6 +125,7 @@ const identity = (r) =>
 /** Work out what an import would do. `rows` are objects keyed by the report's headers. */
 export async function planReturnsImport(db, { channel, marketId = null, rows }) {
   const matcher = await loadMatcher(db, channel);
+  if (channel === 'amazon' && rows.some((r) => pick(r, 'order_ref'))) return planAmazonUnits(db, { marketId, rows, matcher });
   const seen = new Set();
   const planned = [];
 
@@ -189,6 +198,195 @@ export async function planReturnsImport(db, { channel, marketId = null, rows }) 
   };
 }
 
+// ── Amazon: one row per unit, grouped into one return per order ─────────────
+
+// What identifies a unit's row. Identical rows are separate units (multi-unit orders often have no license plate),
+// so the key also counts how many identical rows came before it in the report.
+const rowKey = (u) => [u.order_ref, u.license_plate, u.returned_at, u.sku, u.reason_code, u.quantity].join('|').toLowerCase();
+
+/**
+ * One return from an order's units. The date is the earliest unit's; the note, reason and product come
+ * from the unit whose buyer note says the most (the first one, on a tie).
+ */
+export function rollUpUnits(units) {
+  let best = units[0];
+  let bestLength = -1;
+  for (const u of units) {
+    const length = cleanNote({ channel: 'amazon', comment: u.customer_comment }).note.length;
+    if (length > bestLength) [best, bestLength] = [u, length];
+  }
+  return {
+    return_date: units.map((u) => u.unit_date).sort()[0],
+    quantity: units.reduce((n, u) => n + u.quantity, 0),
+    sku: best.sku,
+    external_id: best.external_id,
+    product_label: best.product_label,
+    customer_comment: best.customer_comment,
+    disposition: best.disposition,
+    status: best.status,
+    ...classifyReason(best.reason_code),
+  };
+}
+
+async function planAmazonUnits(db, { marketId, rows, matcher }) {
+  const occurrences = new Map();
+  const units = [];
+  for (const [i, raw] of rows.entries()) {
+    const u = {
+      line: i + 2,
+      returned_at: pick(raw, 'return_date').slice(0, 50),
+      unit_date: parseReportDate(pick(raw, 'return_date')),
+      order_ref: pick(raw, 'order_ref').slice(0, 100),
+      license_plate: pick(raw, 'license_plate').slice(0, 100),
+      sku: pick(raw, 'sku').slice(0, 100),
+      external_id: pick(raw, 'external_id').slice(0, 100),
+      fnsku: pick(raw, 'fnsku').slice(0, 100),
+      product_label: pick(raw, 'product_label').slice(0, 300),
+      quantity: Math.max(1, Math.trunc(Number(pick(raw, 'quantity') || 1)) || 1),
+      reason_code: classifyReason(pick(raw, 'reason')).reason_code,
+      customer_comment: pick(raw, 'customer_comment').slice(0, 2000),
+      disposition: pick(raw, 'disposition').slice(0, 100),
+      status: pick(raw, 'status').slice(0, 100),
+      fulfillment_center: pick(raw, 'fulfillment_center').slice(0, 50),
+    };
+    const shown = { ...u, return_date: u.unit_date, ...classifyReason(pick(raw, 'reason')) };
+    if (!u.unit_date) units.push({ ...shown, action: 'error', error: 'Missing or unreadable return date' });
+    else if (!u.order_ref) units.push({ ...shown, action: 'error', error: 'No order ID' });
+    else if (!u.sku && !u.external_id && !u.product_label) units.push({ ...shown, action: 'error', error: 'No SKU, ASIN or product name' });
+    else {
+      const n = (occurrences.get(rowKey(u)) ?? 0) + 1;
+      occurrences.set(rowKey(u), n);
+      units.push({ ...shown, unit_key: `${rowKey(u)}#${n}`, action: 'create' });
+    }
+  }
+
+  // Already imported? By the unit's key, or, for reports imported before units were kept (each unit its own
+  // return under its license plate), by that license plate.
+  const fresh = units.filter((u) => u.action === 'create');
+  const orders = [...new Set(fresh.map((u) => u.order_ref))];
+  // One after the other: planning also runs inside the import transaction, on a single client.
+  const knownKeys = await db.query('SELECT unit_key FROM return_units WHERE unit_key = ANY($1::text[])', [fresh.map((u) => u.unit_key)]);
+  const knownPlates = await db.query("SELECT lower(return_ref) AS ref FROM returns WHERE channel = 'amazon' AND lower(return_ref) = ANY($1::text[])", [
+    fresh.map((u) => u.license_plate.toLowerCase()).filter(Boolean),
+  ]);
+  const knownOrders = await db.query("SELECT id, return_ref FROM returns WHERE channel = 'amazon' AND return_ref = ANY($1::text[])", [orders]);
+  const have = new Set(knownKeys.rows.map((r) => r.unit_key));
+  const legacy = new Set(knownPlates.rows.map((r) => r.ref));
+  for (const u of fresh) {
+    if (have.has(u.unit_key) || legacy.has(u.license_plate.toLowerCase())) Object.assign(u, { action: 'duplicate', reason_dup: 'Already imported' });
+  }
+
+  const existing = new Map(knownOrders.rows.map((r) => [r.return_ref, r]));
+  const byOrder = new Map();
+  for (const u of units.filter((x) => x.action === 'create')) {
+    if (!byOrder.has(u.order_ref)) byOrder.set(u.order_ref, []);
+    byOrder.get(u.order_ref).push(u);
+  }
+
+  const returns = [];
+  for (const [order_ref, group] of byOrder) {
+    const prior = existing.get(order_ref);
+    if (prior) {
+      for (const u of group) Object.assign(u, { action: 'add', reason_dup: 'Adds to an earlier return' });
+      returns.push({ order_ref, action: 'add', return_id: prior.id, units: group });
+      continue;
+    }
+    const r = { order_ref, return_ref: order_ref, ...rollUpUnits(group) };
+    const match = matcher.match(r);
+    for (const u of group) Object.assign(u, match);
+    returns.push({ ...r, ...match, action: 'create', units: group });
+  }
+
+  const creates = returns.filter((r) => r.action === 'create');
+  const unmatched = new Map();
+  for (const r of creates.filter((c) => !c.product_id)) {
+    const k = r.external_id || r.sku || r.product_label;
+    const m = unmatched.get(k) || { external_id: r.external_id, sku: r.sku, product_label: r.product_label, units: 0 };
+    m.units += r.quantity;
+    unmatched.set(k, m);
+  }
+
+  return {
+    channel: 'amazon',
+    marketId,
+    grouped: true,
+    rows: units,
+    returns,
+    summary: {
+      rows: units.length,
+      create: creates.length,
+      units: returns.reduce((n, r) => n + r.units.reduce((m, u) => m + u.quantity, 0), 0),
+      added: returns.filter((r) => r.action === 'add').reduce((n, r) => n + r.units.length, 0),
+      duplicates: units.filter((u) => u.action === 'duplicate').length,
+      errors: units.filter((u) => u.action === 'error').length,
+      unmatched: creates.filter((r) => !r.product_id).length,
+    },
+    unmatched: [...unmatched.values()].sort((a, b) => b.units - a.units),
+  };
+}
+
+async function insertUnits(tx, returnId, importId, units) {
+  for (const u of units) {
+    await tx.query(
+      `INSERT INTO return_units (return_id, import_id, report_line, unit_key, unit_date, license_plate, sku, external_id, fnsku, product_label,
+                                 quantity, reason_code, customer_comment, disposition, status, fulfillment_center)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+      [returnId, importId, u.line, u.unit_key, u.unit_date, u.license_plate, u.sku, u.external_id, u.fnsku, u.product_label,
+        u.quantity, u.reason_code, u.customer_comment, u.disposition, u.status, u.fulfillment_center],
+    );
+  }
+}
+
+/** Work an Amazon return out again from all of its units, e.g. after units were added or an import undone. */
+export async function refreshAmazonReturns(tx, ids) {
+  if (!ids.length) return;
+  const { rows } = await tx.query(
+    `SELECT return_id, unit_date::text AS unit_date, sku, external_id, product_label, quantity, reason_code, customer_comment, disposition, status
+       FROM return_units WHERE return_id = ANY($1::uuid[]) ORDER BY created_at, report_line`,
+    [ids],
+  );
+  const byReturn = new Map();
+  for (const u of rows) {
+    if (!byReturn.has(u.return_id)) byReturn.set(u.return_id, []);
+    byReturn.get(u.return_id).push(u);
+  }
+  for (const [id, units] of byReturn) {
+    const r = rollUpUnits(units);
+    await tx.query(
+      `UPDATE returns SET return_date = $2, quantity = $3, sku = $4, external_id = $5, product_label = $6, reason_code = $7,
+              reason = $8, reason_group = $9, customer_comment = $10, disposition = $11, status = $12 WHERE id = $1`,
+      [id, r.return_date, r.quantity, r.sku, r.external_id, r.product_label, r.reason_code, r.reason, r.reason_group, r.customer_comment, r.disposition, r.status],
+    );
+  }
+  await sortReturns(tx, { ids });
+}
+
+async function runAmazonUnits(tx, plan, importId) {
+  let created = 0;
+  const added = [];
+  for (const r of plan.returns) {
+    if (r.action === 'add') {
+      await insertUnits(tx, r.return_id, importId, r.units);
+      added.push(r.return_id);
+      continue;
+    }
+    const { rows } = await tx.query(
+      `INSERT INTO returns
+         (import_id, product_id, channel, market_id, return_date, return_ref, order_ref, sku, external_id, product_label,
+          quantity, reason_code, reason, reason_group, customer_comment, disposition, status)
+       VALUES ($1, $2, 'amazon', $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       ON CONFLICT DO NOTHING RETURNING id`,
+      [importId, r.product_id, plan.marketId, r.return_date, r.order_ref, r.sku, r.external_id, r.product_label,
+        r.quantity, r.reason_code, r.reason, r.reason_group, r.customer_comment, r.disposition, r.status],
+    );
+    if (!rows[0]) continue;
+    created++;
+    await insertUnits(tx, rows[0].id, importId, r.units);
+  }
+  await refreshAmazonReturns(tx, added);
+  return created;
+}
+
 /** Apply a plan inside a transaction. Returns the import record. */
 export async function runReturnsImport(tx, plan, { filename = '', userId }) {
   const { rows: imp } = await tx.query(
@@ -197,7 +395,8 @@ export async function runReturnsImport(tx, plan, { filename = '', userId }) {
   );
   const importId = imp[0].id;
   let created = 0;
-  for (const r of plan.rows) {
+  if (plan.grouped) created = await runAmazonUnits(tx, plan, importId);
+  for (const r of plan.grouped ? [] : plan.rows) {
     if (r.action !== 'create') continue;
     const { rowCount } = await tx.query(
       `INSERT INTO returns
