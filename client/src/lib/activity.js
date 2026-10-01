@@ -80,6 +80,10 @@ export function describeActivity(a) {
       if (a.action === 'product_linked') return `${who} linked a product to ${label}`;
       if (a.action === 'product_unlinked') return `${who} unlinked a product from ${label}`;
       break;
+    case 'return':
+      if (a.action === 'confirmed') return `${who} confirmed a return from ${label} as ${c.to}`;
+      if (a.action === 'categorized') return `${who} filed a return from ${label} under ${c.to}`;
+      break;
     case 'returns':
       if (a.action === 'sorted') return `${who} re-sorted returns (${c.sorted} sorted, ${c.unsorted} left for review)`;
       break;
@@ -140,6 +144,7 @@ export function activityLink(a) {
   if (a.entity_type === 'vendor') return `/vendors/${a.entity_id}`;
   if (a.entity_type === 'sync') return '/products';
   if (a.entity_type === 'returns_import' || a.entity_type === 'returns') return '/returns';
+  if (a.entity_type === 'return') return '/returns/review';
   if (a.entity_type === 'comparison') return `/comparisons/${a.entity_id}`;
   return null;
 }
