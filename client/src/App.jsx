@@ -25,6 +25,7 @@ import DesignRequestPage from './pages/DesignRequestPage.jsx';
 import VendorsPage from './pages/VendorsPage.jsx';
 import VendorPage from './pages/VendorPage.jsx';
 import ReturnsPage from './pages/ReturnsPage.jsx';
+import ReturnsReviewPage from './pages/ReturnsReviewPage.jsx';
 import ReturnsImportPage from './pages/ReturnsImportPage.jsx';
 import ComparisonsPage from './pages/ComparisonsPage.jsx';
 import ComparisonPage from './pages/ComparisonPage.jsx';
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="/vendors" element={<VendorsPage />} />
         <Route path="/vendors/:id" element={<VendorPage />} />
         <Route path="/returns" element={<ReturnsPage />} />
+        <Route path="/returns/review" element={<ReturnsReviewPage />} />
         <Route
           path="/returns/import"
           element={

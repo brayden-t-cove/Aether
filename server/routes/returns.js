@@ -7,7 +7,7 @@ import { withTransaction } from '../lib/db.js';
 import { isUuid, parse, v } from '../lib/validate.js';
 import { MAX_RETURN_ROWS, planReturnsImport, runReturnsImport } from '../lib/returnsImport.js';
 import { messages } from '../lib/notify.js';
-import { assignReturns, listReturns, returnsSummary, unmatchedReturns } from '../lib/returns.js';
+import { assignReturns, listReturns, returnsSummary, REVIEW_VIEW_KEYS, reviewQueue, setReturnCategory, unmatchedReturns } from '../lib/returns.js';
 import { getCodebook } from '../lib/returnCodebook.js';
 import { sortReturns } from '../lib/returnRules.js';
 
@@ -110,6 +110,32 @@ export function returnRoutes({ db, notify }) {
       });
       await logActivity(db, { entityType: 'returns_import', entityId: imp.id, action: 'deleted', changes: { label: imp.filename || imp.channel, rows: imp.created_count }, userId: req.user.id });
       res.json({ ok: true });
+    }),
+  );
+
+  // Returns waiting on a person: ?view=unsorted (the Other page) or unreviewed (rule calls to confirm).
+  router.get(
+    '/api/returns/review',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const view = REVIEW_VIEW_KEYS.includes(req.query.view) ? req.query.view : 'unsorted';
+      res.json({ view, ...(await reviewQueue(db, { view, channel: readFilters(req.query).channel, limit: req.query.limit })) });
+    }),
+  );
+
+  // File a return under a category and sub-reason, or confirm the rules' call. { category, subreason } as codebook keys.
+  router.patch(
+    '/api/returns/:id/category',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      if (!isUuid(req.params.id)) throw new HttpError(404, 'Return not found');
+      const f = parse(req.body, { category: v.text({ label: 'Category', max: 50 }), subreason: v.text({ label: 'Sub-reason', max: 50 }) }, { required: ['category', 'subreason'] });
+      const result = await setReturnCategory(db, { id: req.params.id, ...f, userId: req.user.id });
+      if (!result) throw new HttpError(404, 'Return not found');
+      if (result.invalid) throw new HttpError(400, 'That sub-reason is not in that category');
+      const { confirmed, from, to, label } = result;
+      await logActivity(db, { entityType: 'return', entityId: req.params.id, action: confirmed ? 'confirmed' : 'categorized', changes: { label, from, to }, userId: req.user.id });
+      res.json({ ok: true, confirmed });
     }),
   );
 
