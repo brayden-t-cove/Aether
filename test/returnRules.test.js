@@ -13,15 +13,34 @@ const sort = (customer_comment, extra = {}) => {
 };
 
 describe('cleaning notes', () => {
-  it("takes Amazon's menu text off and remembers the choice", () => {
-    expect(cleanNote({ channel: 'amazon', comment: 'Changed Mind | My needs changed | Bought a bigger one' })).toEqual({ note: 'Bought a bigger one', preset: 'preset_needs_changed' });
-    expect(cleanNote({ channel: 'amazon', comment: 'Ordering Issue | Ordered too many' })).toEqual({ note: '', preset: 'preset_too_many' });
-    expect(cleanNote({ channel: 'amazon', comment: 'Too small | Does not fit' })).toEqual({ note: 'Too small | Does not fit', preset: '' });
+  const amazon = (comment) => cleanNote({ channel: 'amazon', comment });
+
+  it("takes Amazon's menu off and remembers the choice", () => {
+    expect(amazon('Changed Mind|My needs changed|Bought a bigger one')).toEqual({ note: 'Bought a bigger one', preset: 'preset_needs_changed' });
+    expect(amazon('Ordering Issue|Ordered too many')).toEqual({ note: '', preset: 'preset_too_many' });
+    expect(amazon('New')).toEqual({ note: '', preset: 'preset_new' });
+    expect(amazon('Not Compatible|Wifi network')).toEqual({ note: 'Wifi network', preset: '' });
+    expect(amazon('Delivery Issue|Item was late|Came two days after the date')).toEqual({ note: 'Came two days after the date', preset: '' });
+    expect(amazon('Too small | Does not fit')).toEqual({ note: 'Too small | Does not fit', preset: '' });
   });
 
-  it("takes TikTok's reason off the front of the note", () => {
-    expect(cleanNote({ channel: 'tiktok', comment: 'No longer needed: the camera never paired', reason: 'No longer needed' }).note).toBe('the camera never paired');
-    expect(cleanNote({ channel: 'amazon', comment: 'No longer needed since we moved', reason: 'No longer needed' }).note).toBe('No longer needed since we moved');
+  it("drops empty answers to Amazon's follow-up question", () => {
+    expect(amazon('Not as Expected|Kept losing the signal|No').note).toBe('Kept losing the signal');
+    expect(amazon('Not as Expected|Picture is grainy|nothing specific').note).toBe('Picture is grainy');
+    expect(amazon('Not as Expected|Not what I thought|No two-way talk|No').note).toBe('Not what I thought | No two-way talk');
+  });
+
+  it('decodes HTML entities and tidies spaces', () => {
+    expect(amazon('Defective|Doesn&#39;t   turn on &amp; gets hot').note).toBe("Doesn't turn on & gets hot");
+  });
+
+  it("drops a TikTok note that only repeats the reason, and keeps one that goes on", () => {
+    expect(cleanNote({ channel: 'tiktok', comment: 'No longer needed.', reason: 'No longer needed' }).note).toBe('');
+    expect(cleanNote({ channel: 'tiktok', comment: 'No longer needed just changed my mind', reason: 'No longer needed' }).note).toBe('No longer needed just changed my mind');
+  });
+
+  it('hides phone numbers', () => {
+    expect(cleanNote({ channel: 'tiktok', comment: 'Call me at (555) 010-0199 or 555.010.0123' }).note).toBe('Call me at [phone removed] or [phone removed]');
   });
 
   it('treats N/A, none and punctuation as no note', () => {
@@ -78,7 +97,7 @@ describe('sorting a return', () => {
 
   it('files a return with no note under No Comment', () => {
     expect(sort('')).toBe('no_comment/blank');
-    expect(sort('Ordering Issue | Accidental purchase', { channel: 'amazon' })).toBe('no_comment/preset_accidental');
+    expect(sort('Ordering Issue|Accidental purchase', { channel: 'amazon' })).toBe('no_comment/preset_accidental');
   });
 
   it('sets aside samples and returns that never reached a customer, whatever the note says', () => {

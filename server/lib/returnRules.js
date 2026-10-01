@@ -86,38 +86,68 @@ const BY_REASON = [
 ];
 
 /**
- * Amazon's return menu writes its choices into the comment ahead of the buyer's words, joined by " | ".
- * [menu text, No Comment sub-reason when that's all there is].
+ * Amazon's return menu writes the buyer's choices into the comment ahead of their own words, joined by "|":
+ * "Changed Mind|My needs changed|We moved". Some top-level choices have a second level.
+ * Top level → { second-level choice → No Comment sub-reason, '' → sub-reason when only the top level was picked }.
  */
-const AMAZON_PRESETS = [
-  ['Changed Mind | My needs changed', 'preset_needs_changed'],
-  ['Changed Mind | Found other item', 'preset_found_other'],
-  ['Changed Mind | Found a better price', 'preset_better_price'],
-  ['Ordering Issue | Ordered too many', 'preset_too_many'],
-  ['Ordering Issue | Accidental purchase', 'preset_accidental'],
-  ['Ordering Issue | Ordered wrong item', 'preset_wrong_item'],
-  ['Not as expected', 'preset_not_as_expected'],
-  ['New', 'preset_new'],
-].map(([text, key]) => [text.toLowerCase().split(' | '), key]);
+const AMAZON_MENU = {
+  'changed mind': {
+    'my needs changed': 'preset_needs_changed',
+    'found other item': 'preset_found_other',
+    'found a better price': 'preset_better_price',
+    'not as expected': 'preset_not_as_expected',
+    'item is defective': '',
+  },
+  'ordering issue': {
+    'ordered too many': 'preset_too_many',
+    'accidental purchase': 'preset_accidental',
+    'ordered wrong item': 'preset_wrong_item',
+    'unauthorized purchase': '',
+  },
+  'delivery issue': { 'item was late': '' },
+  'not as expected': { '': 'preset_not_as_expected' },
+  new: { '': 'preset_new' },
+  'not compatible': {},
+  defective: {},
+  'received wrong item': {},
+};
+// Answers to Amazon's follow-up question that say nothing.
+const FILLER = new Set(['', 'no', 'none', 'n/a', 'n\\a', 'na', 'ok', 'same', 'i dont know', "i don't know", 'nothing specific', '.', '-']);
+
+// Amazon's report HTML-escapes the comment ("Doesn&#39;t").
+const ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
+const unescape = (s) =>
+  s.replace(/&(?:#(\d+)|#x([\da-f]+)|(\w+));/gi, (m, dec, hex, name) =>
+    dec ? String.fromCodePoint(Number(dec)) : hex ? String.fromCodePoint(parseInt(hex, 16)) : (ENTITIES[name.toLowerCase()] ?? m));
+
+// Buyers sometimes leave a phone number. It's kept out of the cleaned note, which is what people read.
+const PHONE = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\b\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
 
 // Notes that say nothing: empty, "N/A", "none", ".", "-".
 const EMPTY = /^[\s.\-_/,!?]*(?:n\/?a|none|no|nothing|null|nil)?[\s.\-_/,!?]*$/i;
 
 /** The buyer's own words, with the platform's text taken off. `preset` is the menu choice, when there was one. */
 export function cleanNote({ channel, comment, reason }) {
-  let note = String(comment ?? '').trim();
+  let note = String(comment ?? '').replace(/\s+/g, ' ').trim();
   let preset = '';
   if (channel === 'amazon') {
-    const parts = note.split(/\s*\|\s*/);
-    const lower = parts.map((p) => p.toLowerCase());
-    const hit = AMAZON_PRESETS.find(([menu]) => menu.every((m, i) => lower[i] === m));
-    if (hit) {
-      preset = hit[1];
-      note = parts.slice(hit[0].length).join(' | ');
+    const parts = unescape(note).split('|').map((p) => p.trim());
+    const top = AMAZON_MENU[parts[0]?.toLowerCase()];
+    if (top) {
+      parts.shift();
+      const second = parts[0]?.toLowerCase();
+      if (second && Object.hasOwn(top, second)) {
+        parts.shift();
+        preset = top[second];
+      } else preset = top[''] ?? '';
     }
+    while (parts.length && FILLER.has(parts.at(-1).toLowerCase())) parts.pop();
+    note = parts.filter((p) => !FILLER.has(p.toLowerCase())).join(' | ');
   }
-  const r = String(reason ?? '').trim();
-  if (channel === 'tiktok' && r && note.toLowerCase().startsWith(r.toLowerCase())) note = note.slice(r.length).replace(/^[\s|:;,.-]+/, '');
+  // A TikTok note that only repeats the reason says nothing more; one that starts with it and goes on is kept whole.
+  const bare = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (channel === 'tiktok' && reason && bare(note) === bare(reason)) note = '';
+  note = note.replace(PHONE, '[phone removed]');
   return { note: EMPTY.test(note) ? '' : note.trim(), preset };
 }
 
