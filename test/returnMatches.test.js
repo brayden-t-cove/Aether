@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { extractMatches } from '../client/src/lib/matchWorkbook.js';
+import { extractMatches, unmatchedReason } from '../client/src/lib/matchWorkbook.js';
 import { confidenceKey } from '../server/lib/returnMatches.js';
 import { makeApp, setupDb, signedInAgent, TEST_DATABASE_URL } from './helpers.js';
 
@@ -17,7 +17,15 @@ describe('reading the customer-match workbook', () => {
         ['', '', '', 'High', '', '', ''],
       ],
     },
-    { sheet: 'Unmatched Returns', data: [['Title row'], ['Return Requested', 'Return Order ID', 'Match Status'], ['2026-09-03', '4100000000000000003', 'No activation found']] },
+    {
+      sheet: 'Unmatched Returns',
+      data: [
+        ['Title row'],
+        ['Return Requested', 'Return Order ID', 'Match Status'],
+        ['2026-09-03', '4100000000000000003', 'No activation found for zip'],
+        ['2026-09-04', '4100000000000000005', 'Order not found in Shopify export'],
+      ],
+    },
     { sheet: 'Notes', data: [['Return Order ID', 'Comment'], ['4100000000000000004', 'no confidence column here']] },
   ];
 
@@ -27,13 +35,20 @@ describe('reading the customer-match workbook', () => {
       { return_ref: '4100000000000000001', confidence: 'Low' },
       { return_ref: '4100000000000000001', confidence: 'High' },
       { return_ref: '4100000000000000002', confidence: 'Medium' },
-      { return_ref: '4100000000000000003', confidence: 'unmatched' },
+      { return_ref: '4100000000000000003', confidence: 'unmatched', unmatched_reason: 'no_activation' },
+      { return_ref: '4100000000000000005', confidence: 'unmatched', unmatched_reason: 'order_not_found' },
     ]);
     expect(used).toEqual([
       { sheet: 'Return Matches', rows: 3 },
-      { sheet: 'Unmatched Returns', rows: 1 },
+      { sheet: 'Unmatched Returns', rows: 2 },
     ]);
     expect(JSON.stringify(matches)).not.toMatch(/Person|000-000/);
+  });
+
+  it('reads why a return was unmatched', () => {
+    expect(unmatchedReason('No activation found for zip')).toBe('no_activation');
+    expect(unmatchedReason('Order not found in Shopify export')).toBe('order_not_found');
+    expect(unmatchedReason('')).toBeNull();
   });
 
   it('reads confidence words loosely', () => {
@@ -92,13 +107,13 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
   });
   afterAll(() => db?.end());
 
-  it('counts categories from the notes, leaving out samples, with product problems as a share of returns with a reason', async () => {
-    expect(await summary()).toMatchObject({ units: 5, set_aside_units: 1, share_units: 4, problem_units: 3, no_comment_units: 1, unsorted_units: 0 });
+  it('counts categories from the notes, leaving out samples', async () => {
+    expect(await summary()).toMatchObject({ units: 5, set_aside_units: 1, share_units: 4, fault_units: 1, unclear_units: 2, conditions_units: 1, no_comment_units: 1, unsorted_units: 0 });
     const { body } = await viewer.get('/api/returns/summary').expect(200);
-    expect(body.byCategory.map((c) => [c.key, c.units, c.product_problem])).toEqual([
-      ['connectivity', 2, true],
-      ['fit', 1, false],
-      ['performance', 1, true],
+    expect(body.byCategory.map((c) => [c.key, c.units])).toEqual([
+      ['connectivity', 2],
+      ['fit', 1],
+      ['performance', 1],
     ]);
   });
 
@@ -112,6 +127,7 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
       returns: 5,
       invalid: 2,
       byConfidence: { high: 1, medium: 2, low: 1, unmatched: 1 },
+      noActivation: 0,
       added: 5,
       changed: 0,
       unchanged: 0,
@@ -131,8 +147,8 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
     expect(overview.matches.find((m) => m.confidence === 'medium')).toMatchObject({ channel: 'tiktok', returns: 2, imported: 1 });
 
     // All returns: unchanged. Strong matches: the Low (fit) and unmatched (offline) TikTok returns drop out; Amazon has no rating and stays.
-    expect(await summary('match=all')).toMatchObject({ units: 5, share_units: 4, problem_units: 3 });
-    expect(await summary('match=strong')).toMatchObject({ units: 3, share_units: 2, problem_units: 2, no_comment_units: 1 });
+    expect(await summary('match=all')).toMatchObject({ units: 5, share_units: 4, fault_units: 1, unclear_units: 2 });
+    expect(await summary('match=strong')).toMatchObject({ units: 3, share_units: 2, fault_units: 1, unclear_units: 1, conditions_units: 0, no_comment_units: 1 });
     expect(await summary('match=strong&channel=amazon')).toMatchObject({ units: 1 });
     expect(await summary('match=nonsense')).toMatchObject({ units: 5 });
   });
@@ -141,5 +157,17 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
     const { body } = await editor.post('/api/returns/matches').send({ channel: 'tiktok', matches: [...MATCHES, { return_ref: ref(2), confidence: 'High' }] }).expect(200);
     expect(body.summary).toMatchObject({ added: 0, changed: 1, unchanged: 4 });
     expect(await summary('match=strong')).toMatchObject({ units: 4, share_units: 3 });
+  });
+  it('keeps unmatched returns where no camera went online, and splits unclear connectivity by activation', async () => {
+    // Return 3 ("keeps going offline", unclear) turns out to have no activation in the buyer's zip.
+    await editor.post('/api/returns/matches').send({ channel: 'tiktok', matches: [{ return_ref: ref(3), confidence: 'Unmatched', unmatched_reason: 'no_activation' }] }).expect(200);
+    const strong = await summary('match=strong');
+    expect(strong).toMatchObject({ units: 5, unclear_units: 2, unclear_online_units: 1, unclear_never_units: 1 });
+    // A reason only belongs to an unmatched return.
+    const { body } = await editor.post('/api/returns/matches').send({ channel: 'tiktok', matches: [{ return_ref: ref(4), confidence: 'Medium', unmatched_reason: 'no_activation' }], dryRun: true }).expect(200);
+    expect(body.summary).toMatchObject({ noActivation: 0, unchanged: 1 });
+    // Order not found says nothing, so it is hidden like a Low match.
+    await editor.post('/api/returns/matches').send({ channel: 'tiktok', matches: [{ return_ref: ref(3), confidence: 'unmatched', unmatched_reason: 'order_not_found' }] }).expect(200);
+    expect(await summary('match=strong')).toMatchObject({ units: 4, unclear_units: 1, unclear_never_units: 0 });
   });
 });

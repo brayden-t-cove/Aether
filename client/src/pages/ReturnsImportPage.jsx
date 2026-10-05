@@ -93,7 +93,8 @@ function MatchUpload() {
         <div className={saved ? 'success-card pad' : ''}>
           <h3>{saved ? 'Matches saved' : `Preview: ${upload.filename}`}</h3>
           <p>
-            {s.returns} returns: {Object.entries(MATCH_CONFIDENCE).map(([k, v]) => `${s.byConfidence[k]} ${v}`).join(', ')}.
+            {s.returns} returns: {Object.entries(MATCH_CONFIDENCE).map(([k, v]) => `${s.byConfidence[k]} ${v}`).join(', ')}
+            {s.noActivation > 0 && ` (${s.noActivation} unmatched with no activation in the buyer's zip)`}.
             {' '}
             {s.added} new, {s.changed} changed, {s.unchanged} unchanged
             {s.invalid > 0 && <span className="warning-text">, {s.invalid} rows without a return ID or a known confidence (skipped)</span>}.

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CHANNELS, MATCH_VIEWS } from '../../../shared/workflow.js';
+import { CHANNELS, MATCH_VIEWS, RETURN_CAUSES } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
@@ -38,6 +38,34 @@ function monthRange(first, last) {
 
 const units = (n) => `${n} ${n === 1 ? 'unit' : 'units'}`;
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
+
+/**
+ * The cause bars. Once the customer-match workbook says whether cameras went online, the unclear group is split:
+ * went online then failed, never went online, and no activation data (Low matches, Amazon, no workbook).
+ */
+function causeRows(t) {
+  const row = (key, label, value, note) => ({ key, label, value, note });
+  const rows = [row('fault', RETURN_CAUSES.fault, t.fault_units, CAUSE_HINTS.fault), row('conditions', RETURN_CAUSES.conditions, t.conditions_units, CAUSE_HINTS.conditions)];
+  const unknown = t.unclear_units - t.unclear_online_units - t.unclear_never_units;
+  if (t.unclear_online_units || t.unclear_never_units) {
+    rows.push(
+      row('online', 'Unclear: went online, then failed', t.unclear_online_units, 'The buyer’s camera was activated, so it worked at least once'),
+      row('never', 'Unclear: never went online', t.unclear_never_units, 'No camera was activated in the buyer’s zip, so it likely never got past setup'),
+    );
+    if (unknown) rows.push(row('unknown', 'Unclear: no activation data', unknown, 'Amazon, weak matches, or no workbook yet'));
+  } else {
+    rows.push(row('unclear', RETURN_CAUSES.unclear, t.unclear_units, CAUSE_HINTS.unclear));
+  }
+  rows.push(row('other', RETURN_CAUSES.other, t.other_cause_units, CAUSE_HINTS.other));
+  return rows;
+}
+
+const CAUSE_HINTS = {
+  fault: 'Hardware, performance, app or firmware, missing manual, or connectivity the note blames on the camera',
+  conditions: 'Router or 5 GHz, weak signal outdoors or through a window, fit, smart-home setup',
+  unclear: "Won't connect, drops offline or Bluetooth, and the note doesn't say why",
+  other: 'Shipping, subscription, changed mind, vague notes',
+};
 
 const monthLabel = (key) => new Date(`${key}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
 
@@ -120,7 +148,9 @@ export default function ReturnsPage() {
   });
   const usedSeries = SERIES.filter((s) => columns.some((c) => c.values[s.key]));
   const t = data?.totals;
-  const problemShare = pct(t?.problem_units, t?.share_units);
+  const faultShare = pct(t?.fault_units, t?.share_units);
+  const unclearShare = pct(t?.unclear_units, t?.share_units);
+  const allUnits = t ? t.units + t.set_aside_units : 0;
   const left = t && [
     t.no_comment_units && `${units(t.no_comment_units)} with no comment`,
     t.unsorted_units && `${units(t.unsorted_units)} not sorted yet`,
@@ -187,8 +217,8 @@ export default function ReturnsPage() {
 
       {match === 'strong' && (
         <p className="muted small">
-          Leaving out TikTok returns the customer-match workbook rated Low or couldn't match. Returns it has no rating for, including all of Amazon,
-          are still counted.
+          Leaving out TikTok returns the customer-match workbook rated Low, or couldn't match because the order wasn't found. Returns where no
+          camera went online in the buyer's zip are kept, as are returns it has no rating for, including all of Amazon.
         </p>
       )}
       <ErrorNote error={error} />
@@ -213,12 +243,10 @@ export default function ReturnsPage() {
                 {formatDate(t.first_date)} – {formatDate(t.last_date)}
               </span>
             </div>
-            <div className={`stat ${problemShare >= 50 ? 'stat-blocked' : ''}`}>
-              <span className="stat-label">Product problems</span>
-              <span className="stat-value">{problemShare}%</span>
-              <span className="stat-hint">
-                {units(t.problem_units)} of {t.share_units} with a reason
-              </span>
+            <div className="stat">
+              <span className="stat-label">Product fault</span>
+              <span className="stat-value">{faultShare}%</span>
+              <span className="stat-hint">{unclearShare > 0 ? `up to ${faultShare + unclearShare}% with unclear connectivity` : `${units(t.fault_units)} of ${t.share_units} with a reason`}</span>
             </div>
             <div className="stat">
               <span className="stat-label">Top category</span>
@@ -273,20 +301,42 @@ export default function ReturnsPage() {
             )}
           </section>
 
+          <section className="card">
+            <h2>What's behind the returns</h2>
+            {t.share_units ? (
+              <HBars
+                ariaLabel="Units by cause"
+                data={causeRows(t).map((row) => ({ ...row, share: pct(row.value, t.share_units) }))}
+              />
+            ) : (
+              <p className="muted">No returns with a reason yet.</p>
+            )}
+            <p className="muted small">
+              Out of {units(t.share_units)} with a reason.{' '}
+              {data.setAside.length > 0 ? (
+                <>
+                  Set aside and not counted: {units(t.set_aside_units)}, {pct(t.set_aside_units, allUnits)}% of all returns in this period (
+                  {data.setAside.map((x) => `${x.units} ${x.name.toLowerCase()}`).join(', ')}).
+                </>
+              ) : (
+                'No returns set aside (samples, or returns that never reached a customer).'
+              )}
+            </p>
+          </section>
+
           <section className="grid-2">
             <div className="card">
               <h2>Why products come back</h2>
               {data.byCategory.length ? (
                 <HBars
                   ariaLabel="Units by category"
-                  data={data.byCategory.map((c) => ({ label: c.name, value: c.units, hint: `${pct(c.units, t.share_units)}%${c.product_problem ? ' · product problem' : ''}` }))}
+                  data={data.byCategory.map((c) => ({ label: c.name, value: c.units, share: pct(c.units, t.share_units) }))}
                 />
               ) : (
                 <p className="muted">No returns with a reason yet.</p>
               )}
               <p className="muted small">
                 From the buyer's own words. {left.length > 0 && <>Not counted: {left.join(', ')}. </>}
-                {t.set_aside_units > 0 && <>{units(t.set_aside_units)} set aside (samples, or never reached a customer). </>}
                 <Link to="/returns/review">Review returns</Link>
               </p>
             </div>
@@ -305,7 +355,7 @@ export default function ReturnsPage() {
                   <tr>
                     <th>Product</th>
                     <th className="num">Units</th>
-                    <th className="num">Product problems</th>
+                    <th className="num">Product fault</th>
                     <th>Top category</th>
                   </tr>
                 </thead>
@@ -324,7 +374,8 @@ export default function ReturnsPage() {
                       </td>
                       <td className="num">{p.units}</td>
                       <td className="num">
-                        {p.problem_units} <span className="muted small">({pct(p.problem_units, p.share_units)}%)</span>
+                        {p.fault_units} <span className="muted small">({pct(p.fault_units, p.share_units)}%)</span>
+                        {p.unclear_units > 0 && <div className="muted small">+{p.unclear_units} unclear</div>}
                       </td>
                       <td className="small">{p.top_category || '—'}</td>
                     </tr>

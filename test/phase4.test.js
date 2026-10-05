@@ -95,15 +95,16 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 4: listings, returns, comparisons', (
     it('summarises returns by month, channel, reason and product', async () => {
       const { body } = await viewer.agent.get('/api/returns/summary').expect(200);
       // The carrier-damaged return never reached a customer, so it is set aside; it still waits for a product.
-      expect(body.totals).toMatchObject({ units: 6, lines: 5, set_aside_units: 1, unmatched_units: 1, share_units: 1, problem_units: 1, no_comment_units: 5, first_date: '2026-08-03', last_date: '2026-09-12' });
+      expect(body.totals).toMatchObject({ units: 6, lines: 5, set_aside_units: 1, unmatched_units: 1, share_units: 1, fault_units: 0, unclear_units: 1, no_comment_units: 5, first_date: '2026-08-03', last_date: '2026-09-12' });
       expect(body.byMonth).toEqual([
         { month: '2026-08', channel: 'amazon', units: 3 },
         { month: '2026-09', channel: 'amazon', units: 1 },
         { month: '2026-09', channel: 'tiktok', units: 2 },
       ]);
       const top = body.byProduct[0];
-      expect(top).toMatchObject({ product_id: doorbell.id, name: 'Doorbell Cam Pro', units: 5, problem_units: 1, top_category: 'Connectivity' });
-      expect(body.byCategory).toEqual([{ key: 'connectivity', name: 'Connectivity', product_problem: true, units: 1 }]);
+      expect(top).toMatchObject({ product_id: doorbell.id, name: 'Doorbell Cam Pro', units: 5, fault_units: 0, unclear_units: 1, top_category: 'Connectivity' });
+      expect(body.byCategory).toEqual([{ key: 'connectivity', name: 'Connectivity', units: 1 }]);
+      expect(body.setAside).toEqual([{ category_key: 'not_customer', key: 'damaged_carrier', name: 'Damaged by carrier', units: 1 }]);
 
       const { body: sept } = await viewer.agent.get(`/api/returns/summary?from=2026-09-01&to=2026-09-30&channel=tiktok`).expect(200);
       expect(sept.totals.units).toBe(2);

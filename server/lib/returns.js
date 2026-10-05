@@ -1,8 +1,16 @@
 /** Returns analytics: totals, monthly trend by channel, categories, platform reasons, and per-product breakdown. */
 
-// The customer-match workbook rated the return Low or couldn't match it to a customer.
+// The customer-match workbook rated the return Low, or couldn't match it for a reason that says nothing (order not
+// found). "No activation found" stays in: no camera went online in the buyer's zip, which is worth counting.
 const WEAK_MATCH = `EXISTS (SELECT 1 FROM return_matches m
-   WHERE m.channel = r.channel AND m.return_ref = r.return_ref AND m.confidence IN ('low', 'unmatched'))`;
+   WHERE m.channel = r.channel AND m.return_ref = r.return_ref
+     AND (m.confidence = 'low' OR (m.confidence = 'unmatched' AND m.unmatched_reason IS DISTINCT FROM 'no_activation')))`;
+
+// Whether the workbook says the buyer's camera went online: 'online' (High or Medium match to an activation),
+// 'never' (no activation found in their zip), or 'unknown' (Low, order not found, no workbook, or Amazon).
+const ONLINE = `COALESCE((SELECT CASE WHEN m.confidence IN ('high', 'medium') THEN 'online'
+                                     WHEN m.unmatched_reason = 'no_activation' THEN 'never' END
+                            FROM return_matches m WHERE m.channel = r.channel AND m.return_ref = r.return_ref), 'unknown')`;
 
 function filters({ from, to, channel, productId, marketId, flag, match }, extra = []) {
   const where = [...extra];
@@ -21,40 +29,54 @@ function filters({ from, to, channel, productId, marketId, flag, match }, extra 
   return { where: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
 }
 
+// A return's cause: its sub-reason's, except that "Points to a camera fault" moves an unclear one to fault.
+const CAUSE = `CASE WHEN s.cause = 'unclear' AND EXISTS (SELECT 1 FROM return_flags pf
+                    WHERE pf.return_id = r.id AND pf.flag = 'points_to_fault' AND pf.active) THEN 'fault'
+                  ELSE COALESCE(s.cause, 'other') END`;
+
 /**
- * Set-aside returns (samples, returns that never reached a customer) are left out of every figure but
- * set_aside_units and unmatched_units (the returns still waiting to be assigned to a product). Shares use
- * only categories that count toward them (not No Comment or unsorted returns).
+ * Set-aside returns (samples, returns that never reached a customer) are left out of every figure but the
+ * setAside breakdown and unmatched_units (returns still waiting to be assigned to a product). Shares and
+ * causes use only categories that count toward them (not No Comment or unsorted returns).
  */
 export async function returnsSummary(db, opts = {}) {
   const { where, params } = filters(opts, ['NOT COALESCE(c.set_aside, false)']);
-  const from = 'FROM returns r LEFT JOIN return_categories c ON c.id = r.category_id';
+  const from = `FROM returns r LEFT JOIN return_categories c ON c.id = r.category_id
+                LEFT JOIN return_subreasons s ON s.id = r.subreason_id`;
   const q = (sql, p = params) => db.query(sql, p).then((r) => r.rows);
   const units = (cond) => `COALESCE(sum(r.quantity) FILTER (WHERE ${cond}), 0)::int`;
+  const cause = (key) => units(`c.in_share AND ${CAUSE} = '${key}'`);
   const all = filters(opts);
-  const [totals, allTotals, byMonth, byCategory, topReasons, byProduct] = await Promise.all([
+  const [totals, allTotals, setAside, byMonth, byCategory, topReasons, byProduct] = await Promise.all([
     q(`SELECT COALESCE(sum(r.quantity), 0)::int AS units, count(*)::int AS lines,
               count(DISTINCT r.product_id)::int AS products,
               ${units('c.in_share')} AS share_units,
-              ${units('c.in_share AND c.product_problem')} AS problem_units,
+              ${cause('fault')} AS fault_units, ${cause('conditions')} AS conditions_units,
+              ${cause('unclear')} AS unclear_units, ${cause('other')} AS other_cause_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'online'`)} AS unclear_online_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'never'`)} AS unclear_never_units,
               ${units("c.key = 'no_comment'")} AS no_comment_units,
               ${units('r.category_id IS NULL')} AS unsorted_units,
               min(r.return_date)::text AS first_date, max(r.return_date)::text AS last_date
          ${from} ${where}`),
     q(`SELECT ${units('c.set_aside')} AS set_aside_units, ${units('r.product_id IS NULL')} AS unmatched_units ${from} ${all.where}`, all.params),
+    q(`SELECT c.key AS category_key, s.key, s.name, sum(r.quantity)::int AS units
+         ${from} ${all.where} ${all.where ? 'AND' : 'WHERE'} c.set_aside
+        GROUP BY c.key, s.key, s.name, c.sort_order, s.sort_order ORDER BY c.sort_order, s.sort_order`, all.params),
     q(`SELECT to_char(date_trunc('month', r.return_date), 'YYYY-MM') AS month, r.channel, sum(r.quantity)::int AS units
          ${from} ${where} GROUP BY 1, 2 ORDER BY 1, 2`),
-    q(`SELECT c.key, c.name, c.product_problem, sum(r.quantity)::int AS units
-         ${from} ${where} ${where ? 'AND' : 'WHERE'} c.in_share
-        GROUP BY c.key, c.name, c.product_problem, c.sort_order ORDER BY units DESC, c.sort_order`),
+    q(`SELECT c.key, c.name, sum(r.quantity)::int AS units
+         ${from} ${where} AND c.in_share
+        GROUP BY c.key, c.name, c.sort_order ORDER BY units DESC, c.sort_order`),
     q(`SELECT r.reason_code, min(r.reason) AS reason, sum(r.quantity)::int AS units
          ${from} ${where} GROUP BY r.reason_code ORDER BY units DESC LIMIT 10`),
-    q(`WITH f AS (SELECT r.*, c.name AS category_name, c.in_share, c.product_problem, c.sort_order ${from} ${where}),
+    q(`WITH f AS (SELECT r.*, c.name AS category_name, c.in_share, c.sort_order, ${CAUSE} AS cause ${from} ${where}),
             per AS (SELECT product_id, category_name, sort_order, sum(quantity) AS u FROM f WHERE in_share GROUP BY 1, 2, 3),
             top AS (SELECT DISTINCT ON (product_id) product_id, category_name FROM per ORDER BY product_id, u DESC, sort_order)
        SELECT f.product_id, COALESCE(p.name, 'Unmatched') AS name, p.model, sum(f.quantity)::int AS units,
               COALESCE(sum(f.quantity) FILTER (WHERE f.in_share), 0)::int AS share_units,
-              COALESCE(sum(f.quantity) FILTER (WHERE f.in_share AND f.product_problem), 0)::int AS problem_units,
+              COALESCE(sum(f.quantity) FILTER (WHERE f.in_share AND f.cause = 'fault'), 0)::int AS fault_units,
+              COALESCE(sum(f.quantity) FILTER (WHERE f.in_share AND f.cause = 'unclear'), 0)::int AS unclear_units,
               t.category_name AS top_category
          FROM f
          LEFT JOIN products p ON p.id = f.product_id
@@ -62,7 +84,7 @@ export async function returnsSummary(db, opts = {}) {
         GROUP BY f.product_id, p.name, p.model, t.category_name
         ORDER BY units DESC`),
   ]);
-  return { totals: { ...totals[0], ...allTotals[0] }, byMonth, byCategory, topReasons, byProduct };
+  return { totals: { ...totals[0], ...allTotals[0] }, setAside, byMonth, byCategory, topReasons, byProduct };
 }
 
 // A return's active flags and secondary category keys, as arrays.

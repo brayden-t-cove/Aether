@@ -106,17 +106,25 @@ function roundedTop(x, y, w, h, r) {
 }
 
 /** Horizontal bars with a value label on each. data: [{ label, value, hint? }] */
+/** Horizontal bars. Each item: { label, value, hint? (tooltip), note? (shown under the label), share? (a % shown after the value) }. */
 export function HBars({ data, color = '--series-1', ariaLabel }) {
   const max = Math.max(1, ...data.map((d) => d.value));
+  const withShare = data.some((d) => d.share != null);
   return (
-    <ul className="hbars" aria-label={ariaLabel}>
+    <ul className={`hbars ${withShare ? 'hbars-share' : ''}`} aria-label={ariaLabel}>
       {data.map((d) => (
         <li key={d.label} title={d.hint ? `${d.label}: ${d.value} (${d.hint})` : `${d.label}: ${d.value}`}>
-          <span className="hbar-label">{d.label}</span>
+          <span className="hbar-label">
+            {d.label}
+            {d.note && <span className="hbar-note">{d.note}</span>}
+          </span>
           <span className="hbar-track">
             <span className="hbar-fill" style={{ width: `${(d.value / max) * 100}%`, background: `var(${color})` }} />
           </span>
-          <span className="hbar-value">{d.value}</span>
+          <span className="hbar-value">
+            {d.value}
+            {d.share != null && <span className="hbar-share"> · {d.share}%</span>}
+          </span>
         </li>
       ))}
     </ul>

@@ -79,12 +79,15 @@ export const RULES = [
 
 /**
  * Flags ride alongside the category. [flag key, pattern on the folded note].
+ * "Points to a camera fault" catches notes that rule out the buyer's setup: next to the router, other
+ * cameras working on the same network, support confirming it's defective.
  * "All units affected" also needs more than one unit, or words that say so.
  */
 export const FLAG_RULES = [
   ['support_unresolved', rx(String.raw`customer (?:service|support|care|serivce)|costumer service|tech(?:nical)? support|\bsupport\b|help ?desk|\bcalled (?:luna|the (?:company|number|manufacturer))|\bcontacted\b|spoke (?:to|with) (?:luna|someone|an? (?:agent|rep)|support|the company|customer)|\bservice people\b|\bluna (?:help|team|told|said)\b|\b(?:they|agent|rep)\b (?:\w+ ){0,3}(?:couldn'?t|could not|can'?t|cannot|were unable to|was unable to) help`)],
   ['cites_claim', rx(String.raw`advertis|marketing|\bfraud|supposed to be (?:a|an)\b|\blisting\b|\bdescription\b|\bstated\b|\bpromis|\bclaims? (?:to|it|that)\b|misleading|false|\bthe add?\b|\bads?\b (?:made|said|showed|says)|\btik ?tok (?:live|videos?|shop|ad)\b|\blive\b(?! (?:view|feed|video|stream|motion|footage|recording)|ly)|(?:said|says|showed) (?:it|they) (?:would|could|can|will)\b|(?:it'?s|it is|they'?re) supposed to (?:have|include|come|show|record|work with)|the video (?:said|showed)|(?:seller|host|presenter) said`)],
   ['all_units', rx(String.raw`\bboth\b|\bneither\b|\bnone of\b|\ball (?:\d+|two|three|four|five|of (?:them|the)|cameras|units|bulbs|the cameras)\b|\bevery (?:one|camera|unit)\b|\beach (?:one|camera|unit)\b|\b(?:2|3|4|5|two|three|four|five) (?:cameras|of them|units|bulbs|devices|lights)\b|\bsecond (?:set|one|camera)\b`)],
+  ['points_to_fault', rx(String.raw`(?:right next to|next to|close to|near|beside|in the same room as|(?:\d+|a few|two|three|five|ten) ?(?:ft|feet|foot|inches|inch) (?:away )?from) (?:the |my |our )?(?:router|modem|wi-?fi|box|extender)|\b\d+ ?(?:ft|feet|foot|inches)\b.{0,30}\b(?:router|modem|wi-?fi)\b|\bsame (?:room|network|location|spot)\b|\b(?:other|another) (?:\w+ ){0,2}(?:cameras?|devices?|bulbs?|ones?)\b.{0,50}\b(?:work|works|worked|working|fine|connect\w*|no (?:issue|problem)s?)\b|(?:support|service|tech|agent|rep|luna|they)\b.{0,40}\b(?:said|says|confirmed|verified|determined|advised|told me|recommend\w*)\b.{0,40}\b(?:defective|faulty|broken|replace\w*)\b|determined (?:the )?(?:item|camera|product|it) (?:is|was) defective`)],
   ['looks_used', rx(String.raw`(?:looks?|looked|obviously|clearly|was|been|already|previously|seems?|seemed) used\b|\bused (?:one|camera|item|product|unit)\b|scratch|previously (?:returned|opened)|refurbish|already (?:set ?up|registered|linked|tied|bound|set on)|someone else'?s|\bdirty\b|open(?:ed)? box|not (?:brand )?new|second.?hand|identification|outer date|out ?dated`)],
 ];
 
