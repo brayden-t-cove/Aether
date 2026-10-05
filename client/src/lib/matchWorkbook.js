@@ -7,12 +7,22 @@
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const ID_HEADERS = ['returnorderid', 'returnid', 'returnrequestid'];
 const CONFIDENCE_HEADERS = ['matchconfidence', 'confidence'];
+const STATUS_HEADERS = ['matchstatus'];
+
+/** The workbook's reason a return couldn't be matched → 'no_activation', 'order_not_found', or null. */
+export function unmatchedReason(status) {
+  const s = String(status ?? '').toLowerCase();
+  if (/no activation/.test(s)) return 'no_activation';
+  if (/order not found/.test(s)) return 'order_not_found';
+  return null;
+}
 
 /**
  * sheets: [{ sheet: name, data: [[cells]] }] as read-excel-file returns them.
  * A sheet with a return ID and a confidence column gives that confidence; a sheet with a return ID and
- * "unmatched" in its name (the workbook's "Unmatched Returns" tab) gives "unmatched". Others are skipped.
- * → { matches: [{ return_ref, confidence }], used: [{ sheet, rows }] }
+ * "unmatched" in its name (the workbook's "Unmatched Returns" tab) gives "unmatched", with why from its
+ * Match Status column ("No activation found for zip", "Order not found…"). Others are skipped.
+ * → { matches: [{ return_ref, confidence, unmatched_reason? }], used: [{ sheet, rows }] }
  */
 export function extractMatches(sheets) {
   const matches = [];
@@ -24,6 +34,7 @@ export function extractMatches(sheets) {
     const header = data[headerAt].map(norm);
     const idCol = header.findIndex((h) => ID_HEADERS.includes(h));
     const confCol = header.findIndex((h) => CONFIDENCE_HEADERS.includes(h));
+    const statusCol = header.findIndex((h) => STATUS_HEADERS.includes(h));
     const unmatchedTab = /unmatched/i.test(sheet);
     if (confCol < 0 && !unmatchedTab) continue;
 
@@ -31,7 +42,8 @@ export function extractMatches(sheets) {
     for (const row of data.slice(headerAt + 1)) {
       const ref = String(row?.[idCol] ?? '').trim();
       if (!ref) continue;
-      matches.push({ return_ref: ref, confidence: confCol >= 0 ? String(row[confCol] ?? '').trim() : 'unmatched' });
+      if (confCol >= 0) matches.push({ return_ref: ref, confidence: String(row[confCol] ?? '').trim() });
+      else matches.push({ return_ref: ref, confidence: 'unmatched', unmatched_reason: statusCol >= 0 ? unmatchedReason(row[statusCol]) : null });
       rows++;
     }
     used.push({ sheet, rows });

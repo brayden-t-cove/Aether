@@ -163,11 +163,12 @@ export const MATCH_CONFIDENCE = {
 };
 
 /**
- * Which returns the Returns page counts. "strong" hides returns the workbook rated Low or couldn't
- * match; returns it says nothing about (all of Amazon, or TikTok before a workbook is uploaded) stay in.
+ * Which returns the Returns page counts. "strong" hides returns the workbook rated Low, or couldn't match because
+ * the order wasn't found. Unmatched returns with no activation in the buyer's zip stay in (the camera never went
+ * online), as do returns it says nothing about (all of Amazon, or TikTok before a workbook is uploaded).
  */
 export const MATCH_VIEWS = {
-  strong: 'High & Medium matches',
+  strong: 'Hide weak matches',
   all: 'All returns',
 };
 

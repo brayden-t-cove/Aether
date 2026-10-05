@@ -19,3 +19,8 @@ ALTER TABLE return_categories DROP COLUMN product_problem;
 ALTER TABLE return_flags DROP CONSTRAINT return_flags_flag_check;
 ALTER TABLE return_flags ADD CONSTRAINT return_flags_flag_check
   CHECK (flag IN ('support_unresolved', 'cites_claim', 'all_units', 'looks_used', 'points_to_fault'));
+
+-- Why the customer-match workbook couldn't match a return. "No activation found" means no camera went online
+-- anywhere in the buyer's zip, which says something about the return; "order not found" says nothing.
+ALTER TABLE return_matches ADD COLUMN unmatched_reason TEXT CHECK (unmatched_reason IN ('no_activation', 'order_not_found'));
+ALTER TABLE return_matches ADD CHECK (unmatched_reason IS NULL OR confidence = 'unmatched');

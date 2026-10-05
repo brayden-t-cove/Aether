@@ -13,7 +13,7 @@ test('the customer-match workbook is read in the browser and only IDs and confid
   page.on('request', (req) => req.url().endsWith('/api/returns/matches') && req.method() === 'POST' && sent.push(req.postData()));
   await card.getByLabel('Customer-match workbook file').setInputFiles('e2e/fixtures/customer-matches.xlsx');
   await expect(card.getByRole('heading', { name: 'Preview: customer-matches.xlsx' })).toBeVisible();
-  await expect(card).toContainText('2 returns: 0 High, 0 Medium, 1 Low, 1 Unmatched. 2 new, 0 changed, 0 unchanged.');
+  await expect(card).toContainText("2 returns: 0 High, 0 Medium, 1 Low, 1 Unmatched (1 unmatched with no activation in the buyer's zip). 2 new, 0 changed, 0 unchanged.");
   await expect(card).toContainText('Read 2 rows from "Return Matches" and 1 rows from "Unmatched Returns"');
   await expect(card).toContainText("1 of these returns aren't in Aether yet");
 
@@ -28,11 +28,12 @@ test('the customer-match workbook is read in the browser and only IDs and confid
   }
 });
 
-test('the Returns page leaves out Low and unmatched returns unless asked for all', async ({ page }) => {
+test('the Returns page leaves out weak matches unless asked for all', async ({ page }) => {
   await login(page);
   await page.goto('/returns?period=all');
   const stat = (label) => page.locator('.stat', { hasText: label }).locator('.stat-value');
   await expect(page.getByLabel('Customer match')).toHaveValue('strong');
+  await expect(page.getByLabel('Customer match').locator('option:checked')).toHaveText('Hide weak matches');
   await expect(page.getByText('Leaving out TikTok returns the customer-match workbook rated Low')).toBeVisible();
   await expect(stat('Units returned')).toHaveText('4'); // TT-E2E-1 was rated Low
 

@@ -1,8 +1,16 @@
 /** Returns analytics: totals, monthly trend by channel, categories, platform reasons, and per-product breakdown. */
 
-// The customer-match workbook rated the return Low or couldn't match it to a customer.
+// The customer-match workbook rated the return Low, or couldn't match it for a reason that says nothing (order not
+// found). "No activation found" stays in: no camera went online in the buyer's zip, which is worth counting.
 const WEAK_MATCH = `EXISTS (SELECT 1 FROM return_matches m
-   WHERE m.channel = r.channel AND m.return_ref = r.return_ref AND m.confidence IN ('low', 'unmatched'))`;
+   WHERE m.channel = r.channel AND m.return_ref = r.return_ref
+     AND (m.confidence = 'low' OR (m.confidence = 'unmatched' AND m.unmatched_reason IS DISTINCT FROM 'no_activation')))`;
+
+// Whether the workbook says the buyer's camera went online: 'online' (High or Medium match to an activation),
+// 'never' (no activation found in their zip), or 'unknown' (Low, order not found, no workbook, or Amazon).
+const ONLINE = `COALESCE((SELECT CASE WHEN m.confidence IN ('high', 'medium') THEN 'online'
+                                     WHEN m.unmatched_reason = 'no_activation' THEN 'never' END
+                            FROM return_matches m WHERE m.channel = r.channel AND m.return_ref = r.return_ref), 'unknown')`;
 
 function filters({ from, to, channel, productId, marketId, flag, match }, extra = []) {
   const where = [...extra];
@@ -45,6 +53,8 @@ export async function returnsSummary(db, opts = {}) {
               ${units('c.in_share')} AS share_units,
               ${cause('fault')} AS fault_units, ${cause('conditions')} AS conditions_units,
               ${cause('unclear')} AS unclear_units, ${cause('other')} AS other_cause_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'online'`)} AS unclear_online_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'never'`)} AS unclear_never_units,
               ${units("c.key = 'no_comment'")} AS no_comment_units,
               ${units('r.category_id IS NULL')} AS unsorted_units,
               min(r.return_date)::text AS first_date, max(r.return_date)::text AS last_date
