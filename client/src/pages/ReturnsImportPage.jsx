@@ -5,13 +5,13 @@ import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
 import { formatDateTime } from '../lib/format.js';
-import { parseTable } from '../lib/table.js';
+import { parseTable, readText } from '../lib/table.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import { MarketSelect } from '../components/Pickers.jsx';
 
 const HOW_TO = {
   amazon: 'In Seller Central: Reports → Fulfillment → Customer Returns (FBA). Download as .txt or .csv and upload it here.',
-  tiktok: 'In TikTok Shop Seller Center: Orders → Returns/Refunds → Export. Upload the .csv here.',
+  tiktok: 'In TikTok Shop Seller Center: Orders → Manage returns → All, then Export. Upload the .csv here.',
   other: 'Any .csv or .tsv with columns such as Date, Order ID, SKU, Product name, Quantity and Reason.',
 };
 
@@ -45,7 +45,7 @@ export default function ReturnsImportPage() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    const rows = parseTable(await file.text());
+    const rows = parseTable(await readText(file));
     if (!rows.length) return setError(new Error('No rows found. Is the header row included?'));
     preview({ filename: file.name, rows });
   }
@@ -117,10 +117,17 @@ export default function ReturnsImportPage() {
           <h2>{result ? 'Import complete' : `Preview: ${upload.filename}`}</h2>
           <p>
             {result ? `Added ${result.import.created_count} returns` : `${s.create} returns (${s.units} units) will be added`}
+            {s.added > 0 && `, ${s.added} more ${s.added === 1 ? 'unit' : 'units'} for returns already imported`}
             {s.duplicates > 0 && `, ${s.duplicates} already imported (skipped)`}
             {s.errors > 0 && <span className="error-text">, {s.errors} rows can't be read</span>}
             {s.unmatched > 0 && <span className="warning-text">. {s.unmatched} aren't matched to a product yet; assign them on the Returns page after importing</span>}.
           </p>
+          {plan?.dateOrder && !result && (
+            <p className="muted small">
+              Dates read {plan.dateOrder === 'dmy' ? 'day first (28/09/2026 is 28 September)' : 'month first (09/28/2026 is September 28)'}. Check a few rows below before importing.
+            </p>
+          )}
+          {plan?.grouped && !result && <p className="muted small">Amazon lists each returned unit on its own row. Units from the same order become one return, so returns count the same way on every channel.</p>}
           <div className="row">
             {!result && can('editor') && (
               <button className="btn primary" onClick={runImport} disabled={busy || s.create === 0}>
@@ -153,7 +160,7 @@ export default function ReturnsImportPage() {
                       <td className="small">{r.return_date || '—'}</td>
                       <td>
                         {r.product_name || <span className="warning-text">Unmatched</span>}
-                        <div className="muted small">{[r.external_id, r.sku, r.product_label].filter(Boolean).join(' · ')}</div>
+                        <div className="muted small">{[r.order_ref && `Order ${r.order_ref}`, r.external_id, r.sku, r.product_label].filter(Boolean).join(' · ')}</div>
                       </td>
                       <td className="num">{r.quantity}</td>
                       <td className="small">
@@ -162,6 +169,7 @@ export default function ReturnsImportPage() {
                       </td>
                       <td className="small">
                         {r.action === 'create' && <span className="tag action-create">New</span>}
+                        {r.action === 'add' && <span className="tag action-create">{r.reason_dup}</span>}
                         {r.action === 'duplicate' && <span className="tag action-skip">{r.reason_dup}</span>}
                         {r.action === 'error' && <span className="error-text">{r.error}</span>}
                       </td>

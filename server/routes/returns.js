@@ -5,7 +5,7 @@ import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
 import { withTransaction } from '../lib/db.js';
 import { isUuid, parse, v } from '../lib/validate.js';
-import { MAX_RETURN_ROWS, planReturnsImport, runReturnsImport } from '../lib/returnsImport.js';
+import { MAX_RETURN_ROWS, planReturnsImport, refreshAmazonReturns, runReturnsImport } from '../lib/returnsImport.js';
 import { messages } from '../lib/notify.js';
 import {
   assignReturns,
@@ -36,10 +36,12 @@ function readFilters(q) {
 
 // The browser only needs a sample of rows to preview; the full plan is rebuilt on import.
 const publicPlan = (plan) => ({
+  grouped: Boolean(plan.grouped),
+  dateOrder: plan.dateOrder ?? null,
   summary: plan.summary,
   unmatched: plan.unmatched.slice(0, 50),
-  rows: plan.rows.slice(0, 200).map(({ line, action, error, reason_dup, return_date, sku, external_id, product_label, quantity, reason, reason_group, product_name }) => ({
-    line, action, error, reason_dup, return_date, sku, external_id, product_label, quantity, reason, reason_group, product_name,
+  rows: plan.rows.slice(0, 200).map(({ line, action, error, reason_dup, return_date, order_ref, sku, external_id, product_label, quantity, reason, reason_group, product_name }) => ({
+    line, action, error, reason_dup, return_date, order_ref, sku, external_id, product_label, quantity, reason, reason_group, product_name,
   })),
 });
 
@@ -115,7 +117,15 @@ export function returnRoutes({ db, notify }) {
       const imp = await withTransaction(db, async (tx) => {
         const { rows } = await tx.query('SELECT * FROM return_imports WHERE id = $1', [req.params.id]);
         if (!rows[0]) throw new HttpError(404, 'Import not found');
+        // Amazon units this import added to returns from earlier imports come off those returns.
+        const { rows: touched } = await tx.query(
+          `SELECT DISTINCT u.return_id FROM return_units u JOIN returns r ON r.id = u.return_id
+            WHERE u.import_id = $1 AND r.import_id IS DISTINCT FROM $1`,
+          [rows[0].id],
+        );
+        await tx.query('DELETE FROM return_units WHERE import_id = $1', [rows[0].id]);
         await tx.query('DELETE FROM returns WHERE import_id = $1', [rows[0].id]);
+        await refreshAmazonReturns(tx, touched.map((t) => t.return_id));
         await tx.query('DELETE FROM return_imports WHERE id = $1', [rows[0].id]);
         return rows[0];
       });

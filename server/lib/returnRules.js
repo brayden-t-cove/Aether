@@ -193,19 +193,17 @@ export function sortReturn({ channel, reason_code = '', reason = '', customer_co
 }
 
 /**
- * Re-run the rules on every return (or only one import's returns). Categories set by a person are kept;
+ * Re-run the rules on every return (or only one import's returns, or the given ids). Categories set by a person are kept;
  * flags are worked out for every return, except where a person turned one on or off.
  * → { sorted, unsorted, flagged }: returns given a category, ones the rules couldn't place, and returns with a flag.
  */
-export async function sortReturns(db, { importId } = {}) {
+export async function sortReturns(db, { importId, ids } = {}) {
   const codebook = await getCodebook(db);
   const rank = new Map(codebook.map((c) => [c.key, c.tie_break_rank ?? Infinity]));
-  const ids = new Map(codebook.flatMap((c) => c.subreasons.map((s) => [`${c.key}/${s.key}`, [c.id, s.id]])));
+  const codebookIds = new Map(codebook.flatMap((c) => c.subreasons.map((s) => [`${c.key}/${s.key}`, [c.id, s.id]])));
 
-  const { rows } = await db.query(
-    `SELECT id, channel, reason_code, reason, customer_comment, quantity, category_source FROM returns ${importId ? 'WHERE import_id = $1' : ''}`,
-    importId ? [importId] : [],
-  );
+  const scope = importId ? ['WHERE import_id = $1', [importId]] : ids ? ['WHERE id = ANY($1::uuid[])', [ids]] : ['', []];
+  const { rows } = await db.query(`SELECT id, channel, reason_code, reason, customer_comment, quantity, category_source FROM returns ${scope[0]}`, scope[1]);
 
   const cols = { id: [], category: [], subreason: [], source: [], why: [], note: [] };
   const flags = { id: [], flag: [] };
@@ -218,7 +216,7 @@ export async function sortReturns(db, { importId } = {}) {
       flags.flag.push(flag);
     }
     if (r.category_source === 'manual') continue;
-    const [categoryId, subreasonId] = s.category ? ids.get(`${s.category}/${s.subreason}`) : [null, null];
+    const [categoryId, subreasonId] = s.category ? codebookIds.get(`${s.category}/${s.subreason}`) : [null, null];
     if (categoryId) sorted++;
     else unsorted++;
     cols.id.push(r.id);
