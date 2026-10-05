@@ -95,3 +95,72 @@ export async function assignReturns(db, { channel, external_id, sku, product_lab
   }
   return rowCount;
 }
+
+// A return needs a person when the buyer wrote something and it isn't set aside by its platform code.
+const NEEDS_PERSON = "r.note_clean <> '' AND NOT COALESCE(c.set_aside, false)";
+const REVIEW_VIEWS = {
+  // The Other page: the rules found nothing they recognise.
+  unsorted: 'r.category_id IS NULL',
+  // The rules made a call that no one has looked at yet.
+  unreviewed: `r.category_id IS NOT NULL AND r.reviewed_at IS NULL AND ${NEEDS_PERSON}`,
+};
+export const REVIEW_VIEW_KEYS = Object.keys(REVIEW_VIEWS);
+
+/** Returns waiting on a person, newest first, with counts for the progress line. */
+export async function reviewQueue(db, { view = 'unsorted', channel, limit = 200 } = {}) {
+  const params = [];
+  const where = [];
+  if (channel) {
+    params.push(channel);
+    where.push(`r.channel = $${params.length}`);
+  }
+  const scope = where.length ? `AND ${where.join(' AND ')}` : '';
+  const from = `FROM returns r LEFT JOIN return_categories c ON c.id = r.category_id`;
+  const { rows: [counts] } = await db.query(
+    `SELECT count(*) FILTER (WHERE r.category_id IS NULL)::int AS unsorted,
+            count(*) FILTER (WHERE ${REVIEW_VIEWS.unreviewed})::int AS unreviewed,
+            count(*) FILTER (WHERE ${NEEDS_PERSON})::int AS noted,
+            count(*) FILTER (WHERE ${NEEDS_PERSON} AND r.reviewed_at IS NOT NULL)::int AS reviewed
+       ${from} WHERE true ${scope}`,
+    params,
+  );
+  params.push(Math.min(Math.max(Number(limit) || 200, 1), 1000));
+  const { rows } = await db.query(
+    `SELECT r.id, r.channel, r.return_date::text AS return_date, r.return_ref, r.order_ref, r.product_label, p.name AS product_name,
+            r.quantity, r.reason, r.note_clean, r.category_source, r.category_why,
+            c.key AS category_key, c.name AS category_name, s.key AS subreason_key, s.name AS subreason_name
+       ${from} LEFT JOIN return_subreasons s ON s.id = r.subreason_id LEFT JOIN products p ON p.id = r.product_id
+      WHERE ${REVIEW_VIEWS[view]} ${scope}
+      ORDER BY r.return_date DESC, r.created_at DESC
+      LIMIT $${params.length}`,
+    params,
+  );
+  return { counts, returns: rows };
+}
+
+/**
+ * A person files a return under a category and sub-reason, or confirms the rules' call.
+ * Either way it becomes a manual call the rules won't change. → { before, after } names, or null if not found.
+ */
+export async function setReturnCategory(db, { id, category, subreason, userId }) {
+  const { rows: [pick] } = await db.query(
+    `SELECT c.id AS category_id, s.id AS subreason_id, c.name || ' / ' || s.name AS label
+       FROM return_subreasons s JOIN return_categories c ON c.id = s.category_id WHERE c.key = $1 AND s.key = $2`,
+    [category, subreason],
+  );
+  if (!pick) return { invalid: true };
+  const { rows: [before] } = await db.query(
+    `SELECT r.id, r.product_label, r.return_ref, r.subreason_id, c.name || ' / ' || s.name AS label
+       FROM returns r LEFT JOIN return_categories c ON c.id = r.category_id LEFT JOIN return_subreasons s ON s.id = r.subreason_id
+      WHERE r.id = $1`,
+    [id],
+  );
+  if (!before) return null;
+  await db.query(
+    `UPDATE returns SET category_id = $2, subreason_id = $3, category_source = 'manual',
+            category_why = CASE WHEN subreason_id = $3 THEN category_why ELSE '' END, reviewed_by = $4, reviewed_at = now()
+      WHERE id = $1`,
+    [id, pick.category_id, pick.subreason_id, userId],
+  );
+  return { confirmed: before.subreason_id === pick.subreason_id, from: before.label, to: pick.label, label: before.product_label || before.return_ref };
+}

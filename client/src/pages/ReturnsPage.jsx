@@ -127,11 +127,16 @@ export default function ReturnsPage() {
           <h1>Returns</h1>
           <p className="muted">Amazon and TikTok returns by product, reason and month, to spot defects and trends.</p>
         </div>
-        {can('editor') && (
-          <Link className="btn primary" to="/returns/import">
-            Import returns
+        <div className="row">
+          <Link className="btn" to="/returns/review">
+            Review returns
           </Link>
-        )}
+          {can('editor') && (
+            <Link className="btn primary" to="/returns/import">
+              Import returns
+            </Link>
+          )}
+        </div>
       </header>
 
       <div className="toolbar">
