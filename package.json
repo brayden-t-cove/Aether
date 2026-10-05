@@ -36,6 +36,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
+    "read-excel-file": "^9.3.10",
     "vite": "^6.4.3"
   },
   "devDependencies": {

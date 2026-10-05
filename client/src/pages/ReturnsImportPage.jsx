@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CHANNELS, REASON_GROUPS } from '../../../shared/workflow.js';
+import { CHANNELS, MATCH_CONFIDENCE, REASON_GROUPS } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
 import { formatDateTime } from '../lib/format.js';
 import { parseTable, readText } from '../lib/table.js';
+import { readMatchWorkbook } from '../lib/matchWorkbook.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import { MarketSelect } from '../components/Pickers.jsx';
 
@@ -14,6 +15,103 @@ const HOW_TO = {
   tiktok: 'In TikTok Shop Seller Center: Orders → Manage returns → All, then Export. Upload the .csv here.',
   other: 'Any .csv or .tsv with columns such as Date, Order ID, SKU, Product name, Quantity and Reason.',
 };
+
+/** Upload the customer-match workbook: only each return's ID and match confidence are sent. */
+function MatchUpload() {
+  const { can } = useAuth();
+  const stored = useLoad('/api/returns/matches');
+  const [upload, setUpload] = useState(null); // { filename, matches, used }
+  const [summary, setSummary] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const send = (next, dryRun) =>
+    api('/api/returns/matches', { method: 'POST', body: { channel: 'tiktok', filename: next.filename, matches: next.matches, dryRun } });
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    setSummary(null);
+    setSaved(false);
+    try {
+      const { matches, used } = await readMatchWorkbook(file);
+      if (!matches.length) throw new Error('No returns found. The workbook needs a "Return Order ID" column and a "Match Confidence" column (or an "Unmatched Returns" tab).');
+      const next = { filename: file.name, matches, used };
+      setUpload(next);
+      setSummary((await send(next, true)).summary);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      setSummary((await send(upload, false)).summary);
+      setSaved(true);
+      stored.reload();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const totals = {};
+  for (const m of stored.data?.matches || []) totals[m.confidence] = (totals[m.confidence] || 0) + m.returns;
+  const storedCount = Object.values(totals).reduce((a, b) => a + b, 0);
+  const s = summary;
+
+  return (
+    <section className="card stack" aria-labelledby="matches-heading">
+      <h2 id="matches-heading">Customer matches (TikTok)</h2>
+      <p className="muted small">
+        Upload the customer-match workbook (.xlsx) to record how confidently each TikTok return was matched to a customer. The Returns page then
+        counts High and Medium matches by default. Only each return's ID and confidence are sent; names, phone numbers, emails and addresses stay
+        on your computer.
+      </p>
+      {storedCount > 0 && (
+        <p className="small">
+          On file: {storedCount} returns ({Object.entries(MATCH_CONFIDENCE).map(([k, v]) => `${totals[k] || 0} ${v}`).join(', ')}).
+        </p>
+      )}
+      {can('editor') && (
+        <label className="btn file-btn">
+          {busy ? 'Reading…' : 'Choose workbook…'}
+          <input type="file" accept=".xlsx" onChange={handleFile} hidden disabled={busy} aria-label="Customer-match workbook file" />
+        </label>
+      )}
+      <ErrorNote error={error} />
+      {s && (
+        <div className={saved ? 'success-card pad' : ''}>
+          <h3>{saved ? 'Matches saved' : `Preview: ${upload.filename}`}</h3>
+          <p>
+            {s.returns} returns: {Object.entries(MATCH_CONFIDENCE).map(([k, v]) => `${s.byConfidence[k]} ${v}`).join(', ')}.
+            {' '}
+            {s.added} new, {s.changed} changed, {s.unchanged} unchanged
+            {s.invalid > 0 && <span className="warning-text">, {s.invalid} rows without a return ID or a known confidence (skipped)</span>}.
+          </p>
+          <p className="muted small">
+            Read {upload.used.map((u) => `${u.rows} rows from "${u.sheet}"`).join(' and ')}. A return listed more than once keeps its strongest match.
+            {s.notImported > 0 && ` ${s.notImported} of these returns aren't in Aether yet; their match applies once the TikTok export that has them is imported.`}
+          </p>
+          {!saved && (
+            <button className="btn primary" onClick={save} disabled={busy || s.added + s.changed === 0}>
+              {busy ? 'Saving…' : 'Save matches'}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function ReturnsImportPage() {
   const { can } = useAuth();
@@ -106,7 +204,7 @@ export default function ReturnsImportPage() {
         <p className="muted small">{HOW_TO[channel] || HOW_TO.other}</p>
         <label className="btn file-btn">
           {busy ? 'Reading…' : 'Choose report…'}
-          <input type="file" accept=".csv,.tsv,.txt" onChange={handleFile} hidden disabled={busy} />
+          <input type="file" accept=".csv,.tsv,.txt" onChange={handleFile} hidden disabled={busy} aria-label="Returns report file" />
         </label>
       </div>
 
@@ -182,6 +280,8 @@ export default function ReturnsImportPage() {
           )}
         </div>
       )}
+
+      <MatchUpload />
 
       <section className="card">
         <h2>Past imports</h2>

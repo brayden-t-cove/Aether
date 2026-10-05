@@ -89,6 +89,7 @@ export function describeActivity(a) {
       break;
     case 'returns':
       if (a.action === 'sorted') return `${who} re-sorted returns (${c.sorted} sorted, ${c.unsorted} left for review)`;
+      if (a.action === 'matches_uploaded') return `${who} uploaded customer matches from ${label} (${c.added} new, ${c.changed} changed)`;
       break;
     case 'returns_import':
       if (a.action === 'imported') return `${who} imported ${c.rows} ${c.channel} returns (${c.units} units)`;

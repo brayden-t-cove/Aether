@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CHANNELS, REASON_GROUPS } from '../../../shared/workflow.js';
+import { CHANNELS, MATCH_VIEWS } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
@@ -37,6 +37,7 @@ function monthRange(first, last) {
 }
 
 const units = (n) => `${n} ${n === 1 ? 'unit' : 'units'}`;
+const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 
 const monthLabel = (key) => new Date(`${key}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
 
@@ -94,7 +95,8 @@ export default function ReturnsPage() {
   const period = params.get('period') || '12';
   const channel = params.get('channel') || '';
   const productId = params.get('productId') || '';
-  const query = new URLSearchParams();
+  const match = params.get('match') || 'strong';
+  const query = new URLSearchParams({ match });
   if (period !== 'all') query.set('from', monthsBack(Number(period)));
   if (channel) query.set('channel', channel);
   if (productId) query.set('productId', productId);
@@ -118,7 +120,11 @@ export default function ReturnsPage() {
   });
   const usedSeries = SERIES.filter((s) => columns.some((c) => c.values[s.key]));
   const t = data?.totals;
-  const defectShare = t?.units ? Math.round((t.defect_units / t.units) * 100) : 0;
+  const problemShare = pct(t?.problem_units, t?.share_units);
+  const left = t && [
+    t.no_comment_units && `${units(t.no_comment_units)} with no comment`,
+    t.unsorted_units && `${units(t.unsorted_units)} not sorted yet`,
+  ].filter(Boolean);
 
   return (
     <div className="page">
@@ -166,9 +172,25 @@ export default function ReturnsPage() {
             Product
             <ProductSelect value={productId} onChange={(id) => setFilter('productId', id)} emptyLabel="All" />
           </label>
+          <label className="inline">
+            Customer match
+            <select value={match} onChange={(e) => setFilter('match', e.target.value === 'strong' ? '' : e.target.value)}>
+              {Object.entries(MATCH_VIEWS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
+      {match === 'strong' && (
+        <p className="muted small">
+          Leaving out TikTok returns the customer-match workbook rated Low or couldn't match. Returns it has no rating for, including all of Amazon,
+          are still counted.
+        </p>
+      )}
       <ErrorNote error={error} />
       {!data ? (
         !error && <p className="muted">Loading…</p>
@@ -191,15 +213,17 @@ export default function ReturnsPage() {
                 {formatDate(t.first_date)} – {formatDate(t.last_date)}
               </span>
             </div>
-            <div className={`stat ${defectShare >= 30 ? 'stat-blocked' : ''}`}>
-              <span className="stat-label">Defect or quality</span>
-              <span className="stat-value">{defectShare}%</span>
-              <span className="stat-hint">{units(t.defect_units)}</span>
+            <div className={`stat ${problemShare >= 50 ? 'stat-blocked' : ''}`}>
+              <span className="stat-label">Product problems</span>
+              <span className="stat-value">{problemShare}%</span>
+              <span className="stat-hint">
+                {units(t.problem_units)} of {t.share_units} with a reason
+              </span>
             </div>
             <div className="stat">
-              <span className="stat-label">Top reason</span>
-              <span className="stat-value stat-text">{data.topReasons[0]?.reason || '—'}</span>
-              <span className="stat-hint">{data.topReasons[0] ? units(data.topReasons[0].units) : ''}</span>
+              <span className="stat-label">Top category</span>
+              <span className="stat-value stat-text">{data.byCategory[0]?.name || '—'}</span>
+              <span className="stat-hint">{data.byCategory[0] ? `${units(data.byCategory[0].units)} · ${pct(data.byCategory[0].units, t.share_units)}%` : ''}</span>
             </div>
             <div className={`stat ${t.unmatched_units ? 'stat-overdue' : ''}`}>
               <span className="stat-label">Not matched to a product</span>
@@ -252,11 +276,24 @@ export default function ReturnsPage() {
           <section className="grid-2">
             <div className="card">
               <h2>Why products come back</h2>
-              <HBars ariaLabel="Units by reason group" data={data.byGroup.map((g) => ({ label: REASON_GROUPS[g.group] || g.group, value: g.units }))} />
+              {data.byCategory.length ? (
+                <HBars
+                  ariaLabel="Units by category"
+                  data={data.byCategory.map((c) => ({ label: c.name, value: c.units, hint: `${pct(c.units, t.share_units)}%${c.product_problem ? ' · product problem' : ''}` }))}
+                />
+              ) : (
+                <p className="muted">No returns with a reason yet.</p>
+              )}
+              <p className="muted small">
+                From the buyer's own words. {left.length > 0 && <>Not counted: {left.join(', ')}. </>}
+                {t.set_aside_units > 0 && <>{units(t.set_aside_units)} set aside (samples, or never reached a customer). </>}
+                <Link to="/returns/review">Review returns</Link>
+              </p>
             </div>
             <div className="card">
-              <h2>Top reasons</h2>
-              <HBars ariaLabel="Top return reasons" color="--series-1" data={data.topReasons.map((r) => ({ label: r.reason || r.reason_code || 'No reason given', value: r.units, hint: REASON_GROUPS[r.group] }))} />
+              <h2>Reason picked on the platform</h2>
+              <HBars ariaLabel="Reasons picked on the platform" color="--series-1" data={data.topReasons.map((r) => ({ label: r.reason || r.reason_code || 'No reason given', value: r.units }))} />
+              <p className="muted small">The buyer's menu choice, which often differs from what their note says.</p>
             </div>
           </section>
 
@@ -268,8 +305,8 @@ export default function ReturnsPage() {
                   <tr>
                     <th>Product</th>
                     <th className="num">Units</th>
-                    <th className="num">Defect / quality</th>
-                    <th>Top reason</th>
+                    <th className="num">Product problems</th>
+                    <th>Top category</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -287,9 +324,9 @@ export default function ReturnsPage() {
                       </td>
                       <td className="num">{p.units}</td>
                       <td className="num">
-                        {p.defect_units} <span className="muted small">({p.units ? Math.round((p.defect_units / p.units) * 100) : 0}%)</span>
+                        {p.problem_units} <span className="muted small">({pct(p.problem_units, p.share_units)}%)</span>
                       </td>
-                      <td className="small">{p.top_reason || '—'}</td>
+                      <td className="small">{p.top_category || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
