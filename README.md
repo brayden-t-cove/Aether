@@ -54,6 +54,8 @@ Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hide
   - Re-importing never double counts, and admins can undo an import.
   - The Returns page shows monthly trends by channel, top reasons and a per-product breakdown.
   - Unmatched rows can be assigned to a product, which also teaches future imports.
+  - Returns are sorted into categories from the buyer's own note (**Returns → Review returns** for the ones that need a person). The Returns page charts those categories; "Product problems" is the share of returns with a reason that fall under Connectivity, Performance, Hardware or Setup.
+  - **Customer matches:** on the import page, upload the customer-match workbook (.xlsx) each week. The browser reads it and sends only each return's ID and match confidence; customer names, phones, emails and addresses never leave your computer. The Returns page then hides TikTok returns rated Low or Unmatched, unless you pick "All returns".
 - **Comparisons:** a grid of a Luna product against competitors, with editable rows (price, resolution, field of view…). Competitors can be reused across comparisons.
 
 ## Notifications and operations (Phase 5)

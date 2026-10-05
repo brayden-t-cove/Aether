@@ -12,7 +12,7 @@ const TONES = { planned: 'neutral', draft: 'active', in_review: 'warning', live:
 /** Marketplace listings and a returns summary for one product. */
 export default function ProductListings({ productId, editable }) {
   const { data, reload } = useLoad(`/api/products/${productId}/listings`);
-  const returns = useLoad(`/api/returns/summary?productId=${productId}`);
+  const returns = useLoad(`/api/returns/summary?productId=${productId}&match=strong`);
   const [form, setForm] = useState(null);
   const [error, setError] = useState(null);
 
@@ -43,8 +43,8 @@ export default function ProductListings({ productId, editable }) {
           <Link to={`/returns?productId=${productId}&period=all`}>
             {t.units} {t.units === 1 ? 'unit' : 'units'} returned
           </Link>
-          {t.defect_units > 0 && `, ${Math.round((t.defect_units / t.units) * 100)}% for defects or quality`}
-          {returns.data.topReasons[0] && ` · top reason: ${returns.data.topReasons[0].reason}`}
+          {t.problem_units > 0 && `, ${Math.round((t.problem_units / t.share_units) * 100)}% for product problems`}
+          {returns.data.byCategory[0] && ` · top category: ${returns.data.byCategory[0].name}`}
         </p>
       )}
       {!data?.listings.length && !form && <p className="muted">No listings yet.</p>}

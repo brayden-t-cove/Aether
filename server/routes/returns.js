@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { CHANNELS, RETURN_FLAGS } from '../../shared/workflow.js';
+import { CHANNELS, MATCH_VIEWS, RETURN_FLAGS } from '../../shared/workflow.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
@@ -20,6 +20,7 @@ import {
 } from '../lib/returns.js';
 import { getCodebook } from '../lib/returnCodebook.js';
 import { sortReturns } from '../lib/returnRules.js';
+import { MAX_MATCH_ROWS, matchesOverview, planMatches, saveMatches } from '../lib/returnMatches.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -31,6 +32,7 @@ function readFilters(q) {
     productId: isUuid(q.productId) ? q.productId : undefined,
     marketId: isUuid(q.marketId) ? q.marketId : undefined,
     flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
+    match: Object.hasOwn(MATCH_VIEWS, q.match ?? '') ? q.match : undefined,
   };
 }
 
@@ -131,6 +133,41 @@ export function returnRoutes({ db, notify }) {
       });
       await logActivity(db, { entityType: 'returns_import', entityId: imp.id, action: 'deleted', changes: { label: imp.filename || imp.channel, rows: imp.created_count }, userId: req.user.id });
       res.json({ ok: true });
+    }),
+  );
+
+  // Match confidence already uploaded, per channel and confidence.
+  router.get(
+    '/api/returns/matches',
+    requireAuth,
+    asyncHandler(async (req, res) => res.json({ matches: await matchesOverview(db) })),
+  );
+
+  // Upload match confidence from the customer-match workbook. { channel, filename?, matches: [{ return_ref, confidence }], dryRun }
+  router.post(
+    '/api/returns/matches',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const { channel } = parse(req.body, { channel: v.oneOf(CHANNELS, { label: 'Channel' }) }, { required: ['channel'] });
+      const matches = req.body?.matches;
+      if (!Array.isArray(matches) || matches.length === 0) throw new HttpError(400, 'No returns found in the workbook');
+      if (matches.length > MAX_MATCH_ROWS) throw new HttpError(400, `At most ${MAX_MATCH_ROWS} rows per upload`);
+      const filename = v.text({ label: 'File name', max: 200 })(req.body.filename);
+
+      const plan = await planMatches(db, { channel, matches });
+      if (!plan.matches.size) throw new HttpError(400, 'No rows with a return ID and a confidence of High, Medium, Low or Unmatched');
+      if (req.body.dryRun) return res.json({ dryRun: true, summary: plan.summary });
+
+      await withTransaction(db, (tx) => saveMatches(tx, plan, { userId: req.user.id }));
+      const { added, changed, byConfidence } = plan.summary;
+      await logActivity(db, {
+        entityType: 'returns',
+        entityId: channel,
+        action: 'matches_uploaded',
+        changes: { label: filename || CHANNELS[channel], added, changed, ...byConfidence },
+        userId: req.user.id,
+      });
+      res.json({ dryRun: false, summary: plan.summary });
     }),
   );
 

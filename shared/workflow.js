@@ -142,6 +142,23 @@ export const RETURN_FLAGS = {
   looks_used: 'Looks used / previously returned',
 };
 
+/** How confidently the customer-match workbook tied a return to a real customer, strongest first. */
+export const MATCH_CONFIDENCE = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+  unmatched: 'Unmatched',
+};
+
+/**
+ * Which returns the Returns page counts. "strong" hides returns the workbook rated Low or couldn't
+ * match; returns it says nothing about (all of Amazon, or TikTok before a workbook is uploaded) stay in.
+ */
+export const MATCH_VIEWS = {
+  strong: 'High & Medium matches',
+  all: 'All returns',
+};
+
 /** Amazon customer-return reason codes → readable label and group. */
 export const AMAZON_REASONS = {
   DEFECTIVE: ['Defective / does not work', 'defect'],

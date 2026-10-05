@@ -37,7 +37,7 @@ test('a note the rules don’t recognise lands on the Other page and is filed by
   await login(page, 'editor');
   await page.goto('/returns/import');
   await page.getByLabel('Channel').selectOption('tiktok');
-  await page.locator('input[type=file]').setInputFiles('e2e/fixtures/tiktok-returns.csv');
+  await page.getByLabel('Returns report file').setInputFiles('e2e/fixtures/tiktok-returns.csv');
   await page.getByRole('button', { name: 'Import', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import complete' })).toBeVisible();
 

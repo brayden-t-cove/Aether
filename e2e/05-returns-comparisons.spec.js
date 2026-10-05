@@ -23,7 +23,7 @@ test('an Amazon returns report is previewed, imported, and re-importing is harml
   await expect(page.getByText('No returns in this period yet.')).toBeVisible();
   await page.getByRole('link', { name: 'Import returns' }).first().click();
   await field(page, 'Market', 'select').selectOption({ label: 'US · United States' });
-  await page.locator('input[type=file]').setInputFiles('e2e/fixtures/amazon-returns.tsv');
+  await page.getByLabel('Returns report file').setInputFiles('e2e/fixtures/amazon-returns.tsv');
   await expect(page.getByText('4 returns (5 units) will be added')).toBeVisible();
   await expect(page.getByText("1 aren't matched to a product yet")).toBeVisible();
   const preview = page.locator('table');
@@ -35,7 +35,7 @@ test('an Amazon returns report is previewed, imported, and re-importing is harml
   await expect(page.getByRole('heading', { name: 'Import complete' })).toBeVisible();
   await expect.poll(async () => (await slackMessages(request)).at(-1)).toMatch(/imported 4 Amazon returns \(5 units\)/);
 
-  await page.locator('input[type=file]').setInputFiles('e2e/fixtures/amazon-returns.tsv');
+  await page.getByLabel('Returns report file').setInputFiles('e2e/fixtures/amazon-returns.tsv');
   await expect(page.getByText('0 returns (0 units) will be added, 4 already imported (skipped)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
 });
@@ -44,13 +44,15 @@ test('the returns page charts the trend, reasons and products, with a table view
   await login(page);
   await page.goto('/returns?period=all');
   const stat = (label) => page.locator('.stat', { hasText: label }).locator('.stat-value');
-  await expect(stat('Units returned')).toHaveText('5');
-  await expect(stat('Defect or quality')).toHaveText('20%');
+  // The carrier-damaged return never reached a customer, so it's set aside; it still waits for a product.
+  await expect(stat('Units returned')).toHaveText('4');
+  await expect(stat('Product problems')).toHaveText('100%'); // the one return with a note: "Stopped working"
+  await expect(stat('Top category')).toHaveText('Hardware Defect / DOA');
   await expect(stat('Not matched to a product')).toHaveText('1');
 
   const chart = page.getByRole('img', { name: 'Units returned per month by channel' });
   await expect(chart).toBeVisible();
-  await expect(chart.locator('.chart-value')).toHaveText(['1', '2', '2']); // Jul, Aug, Sep totals
+  await expect(chart.locator('.chart-value')).toHaveText(['1', '2', '1']); // Jul, Aug, Sep totals
   await chart.locator('g[tabindex="0"]').nth(1).hover();
   await expect(page.locator('.chart-tooltip')).toContainText('Amazon: 2');
 
@@ -58,7 +60,9 @@ test('the returns page charts the trend, reasons and products, with a table view
   await expect(page.locator('table').first()).toContainText('Total');
   await page.getByRole('button', { name: 'Show chart' }).click();
 
-  await expect(page.getByRole('list', { name: 'Units by reason group' })).toContainText('Changed mind');
+  await expect(page.getByRole('list', { name: 'Units by category' })).toContainText('Hardware Defect / DOA');
+  await expect(page.getByText('Not counted: 3 units with no comment')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Reasons picked on the platform' })).toContainText('No longer needed');
   const products = page.locator('.card', { hasText: 'By product' });
   await expect(products.locator('tbody tr').first()).toContainText('Sample Doorbell');
   await products.getByRole('button', { name: 'Sample Doorbell' }).click();
@@ -78,7 +82,9 @@ test('an unmatched return is assigned and future imports learn the match', async
   await page.goto('/products');
   await page.getByRole('link', { name: 'Sample Hub', exact: true }).click();
   await expect(page.getByText('B0MYSTERY')).toBeVisible();
-  await expect(page.getByRole('link', { name: '1 unit returned' })).toBeVisible();
+  // Its only return was damaged by the carrier and never reached a customer, so it's set aside, not counted as returned.
+  await expect(page.getByRole('heading', { name: 'Listings & returns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /returned$/ })).toHaveCount(0);
 });
 
 test('a comparison grid is built and its cells persist', async ({ page }) => {
