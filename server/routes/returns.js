@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { CHANNELS } from '../../shared/workflow.js';
+import { CHANNELS, RETURN_FLAGS } from '../../shared/workflow.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
@@ -7,7 +7,17 @@ import { withTransaction } from '../lib/db.js';
 import { isUuid, parse, v } from '../lib/validate.js';
 import { MAX_RETURN_ROWS, planReturnsImport, refreshAmazonReturns, runReturnsImport } from '../lib/returnsImport.js';
 import { messages } from '../lib/notify.js';
-import { assignReturns, listReturns, returnsSummary, REVIEW_VIEW_KEYS, reviewQueue, setReturnCategory, unmatchedReturns } from '../lib/returns.js';
+import {
+  assignReturns,
+  listReturns,
+  returnsSummary,
+  REVIEW_VIEW_KEYS,
+  reviewQueue,
+  setReturnCategory,
+  setReturnFlag,
+  setSecondaryCategories,
+  unmatchedReturns,
+} from '../lib/returns.js';
 import { getCodebook } from '../lib/returnCodebook.js';
 import { sortReturns } from '../lib/returnRules.js';
 
@@ -20,6 +30,7 @@ function readFilters(q) {
     channel: Object.hasOwn(CHANNELS, q.channel ?? '') ? q.channel : undefined,
     productId: isUuid(q.productId) ? q.productId : undefined,
     marketId: isUuid(q.marketId) ? q.marketId : undefined,
+    flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
   };
 }
 
@@ -129,7 +140,8 @@ export function returnRoutes({ db, notify }) {
     requireAuth,
     asyncHandler(async (req, res) => {
       const view = REVIEW_VIEW_KEYS.includes(req.query.view) ? req.query.view : 'unsorted';
-      res.json({ view, ...(await reviewQueue(db, { view, channel: readFilters(req.query).channel, limit: req.query.limit })) });
+      const { channel, flag } = readFilters(req.query);
+      res.json({ view, ...(await reviewQueue(db, { view, channel, flag, limit: req.query.limit })) });
     }),
   );
 
@@ -146,6 +158,45 @@ export function returnRoutes({ db, notify }) {
       const { confirmed, from, to, label } = result;
       await logActivity(db, { entityType: 'return', entityId: req.params.id, action: confirmed ? 'confirmed' : 'categorized', changes: { label, from, to }, userId: req.user.id });
       res.json({ ok: true, confirmed });
+    }),
+  );
+
+  // Turn a flag on or off. { on: true | false }
+  router.put(
+    '/api/returns/:id/flags/:flag',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      if (!isUuid(req.params.id)) throw new HttpError(404, 'Return not found');
+      if (!Object.hasOwn(RETURN_FLAGS, req.params.flag)) throw new HttpError(404, 'No such flag');
+      if (typeof req.body?.on !== 'boolean') throw new HttpError(400, 'Say whether the flag is on or off');
+      const result = await setReturnFlag(db, { id: req.params.id, flag: req.params.flag, on: req.body.on, userId: req.user.id });
+      if (!result) throw new HttpError(404, 'Return not found');
+      await logActivity(db, {
+        entityType: 'return',
+        entityId: req.params.id,
+        action: req.body.on ? 'flag_added' : 'flag_removed',
+        changes: { label: result.label, flag: RETURN_FLAGS[req.params.flag] },
+        userId: req.user.id,
+      });
+      res.json({ ok: true });
+    }),
+  );
+
+  // Other problems the buyer also mentions. { categories: [codebook keys] } replaces the list.
+  router.put(
+    '/api/returns/:id/secondary',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      if (!isUuid(req.params.id)) throw new HttpError(404, 'Return not found');
+      const categories = req.body?.categories;
+      if (!Array.isArray(categories) || categories.length > 10 || !categories.every((k) => typeof k === 'string')) {
+        throw new HttpError(400, 'Categories must be a list of codebook keys');
+      }
+      const result = await setSecondaryCategories(db, { id: req.params.id, categories, userId: req.user.id });
+      if (!result) throw new HttpError(404, 'Return not found');
+      if (result.invalid) throw new HttpError(400, 'Unknown category');
+      await logActivity(db, { entityType: 'return', entityId: req.params.id, action: 'secondary_updated', changes: { label: result.label, categories: result.names }, userId: req.user.id });
+      res.json({ ok: true, secondary: result.names });
     }),
   );
 

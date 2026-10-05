@@ -15,6 +15,19 @@ test('an editor confirms a call the rules made', async ({ page }) => {
   const row = page.locator('tr', { hasText: 'Stopped working' });
   await expect(row).toContainText('Hardware Defect / DOA');
   await expect(row).toContainText('note matched: "stopped working"');
+  // Flags and other categories the note mentions ride alongside the call.
+  const flag = row.getByRole('button', { name: 'Support contacted, unresolved' });
+  await expect(flag).toHaveAttribute('aria-pressed', 'false');
+  await flag.click();
+  await expect(flag).toHaveAttribute('aria-pressed', 'true');
+  await row.getByLabel('Add another category').selectOption('performance');
+  await expect(row).toContainText('Also about: Performance & Quality');
+  await page.getByLabel('Filter by flag').selectOption('looks_used');
+  await expect(page.getByText('Every call the rules made has been reviewed.')).toBeVisible();
+  await page.getByLabel('Filter by flag').selectOption('support_unresolved');
+  await expect(row).toBeVisible();
+  await page.getByLabel('Filter by flag').selectOption('');
+
   await row.getByRole('button', { name: 'Confirm' }).click();
   await expect(page.getByText('Every call the rules made has been reviewed.')).toBeVisible();
   await expect(page.getByLabel('Review progress')).toContainText('1 of 1 returns with a note reviewed (100%)');
@@ -33,7 +46,7 @@ test('a note the rules don’t recognise lands on the Other page and is filed by
   const row = page.locator('tr', { hasText: 'Thanks anyway' });
   await expect(row).toContainText('Platform reason: No longer needed');
   await expect(row.getByRole('button', { name: 'Save' })).toBeDisabled();
-  await row.getByRole('combobox').selectOption('non_specific/vague');
+  await row.getByLabel(/^Category for/).selectOption('non_specific/vague');
   await row.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Every return with a note has a category.')).toBeVisible();
   await expect(page.getByLabel('Review progress')).toContainText('2 of 2');

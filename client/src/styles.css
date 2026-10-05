@@ -359,6 +359,18 @@ a {
 .chip:hover {
   border-color: var(--accent);
 }
+button.chip {
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+}
+.chip-on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
 
 .activity {
   list-style: none;

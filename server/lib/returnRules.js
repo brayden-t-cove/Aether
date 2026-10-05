@@ -77,6 +77,24 @@ export const RULES = [
   ['non_specific', 'vague', rx(String.raw`${NOT} (?:\w+ ){0,3}(?:work|working|works|function|functioning|funciona|sirve)|defective|faulty|junk|garbage|trash|terrible|horrible|awful|useless|sucks|\bpoor\b|\bcheap\b|not (?:as|what) (?:i |we )?(?:expected|described|advertised|thought)|not as (?:described|advertised|expected)|disappoint|(?:don'?t|didn'?t|do not|did not|dont) like|not (?:happy|satisfied|good)|dissatisf|malfunction|\bbad (?:camera|product|quality|item)\b|\bproblems?\b|\bissues?\b|\bdamaged\b|neither (?:\w+ )?works?|not (?:what|the (?:type|kind) of \w+) (?:was |we |i )?(?:\w+ )?(?:intended|looking for|needed|wanted)|not (?:be )?right for|features for (?:my|our) use|(?:can ?not|cannot|can'?t|unable to) use\b|(?:didn'?t|did not|doesn'?t|does not) do what|not (?:very )?accurate|fonctionne pas|pas ce que|\bcheep\b|no lo use`)],
 ];
 
+/**
+ * Flags ride alongside the category. [flag key, pattern on the folded note].
+ * "All units affected" also needs more than one unit, or words that say so.
+ */
+export const FLAG_RULES = [
+  ['support_unresolved', rx(String.raw`customer (?:service|support|care|serivce)|costumer service|tech(?:nical)? support|\bsupport\b|help ?desk|\bcalled (?:luna|the (?:company|number|manufacturer))|\bcontacted\b|spoke (?:to|with) (?:luna|someone|an? (?:agent|rep)|support|the company|customer)|\bservice people\b|\bluna (?:help|team|told|said)\b|\b(?:they|agent|rep)\b (?:\w+ ){0,3}(?:couldn'?t|could not|can'?t|cannot|were unable to|was unable to) help`)],
+  ['cites_claim', rx(String.raw`advertis|marketing|\bfraud|supposed to be (?:a|an)\b|\blisting\b|\bdescription\b|\bstated\b|\bpromis|\bclaims? (?:to|it|that)\b|misleading|false|\bthe add?\b|\bads?\b (?:made|said|showed|says)|\btik ?tok (?:live|videos?|shop|ad)\b|\blive\b(?! (?:view|feed|video|stream|motion|footage|recording)|ly)|(?:said|says|showed) (?:it|they) (?:would|could|can|will)\b|(?:it'?s|it is|they'?re) supposed to (?:have|include|come|show|record|work with)|the video (?:said|showed)|(?:seller|host|presenter) said`)],
+  ['all_units', rx(String.raw`\bboth\b|\bneither\b|\bnone of\b|\ball (?:\d+|two|three|four|five|of (?:them|the)|cameras|units|bulbs|the cameras)\b|\bevery (?:one|camera|unit)\b|\beach (?:one|camera|unit)\b|\b(?:2|3|4|5|two|three|four|five) (?:cameras|of them|units|bulbs|devices|lights)\b|\bsecond (?:set|one|camera)\b`)],
+  ['looks_used', rx(String.raw`(?:looks?|looked|obviously|clearly|was|been|already|previously|seems?|seemed) used\b|\bused (?:one|camera|item|product|unit)\b|scratch|previously (?:returned|opened)|refurbish|already (?:set ?up|registered|linked|tied|bound|set on)|someone else'?s|\bdirty\b|open(?:ed)? box|not (?:brand )?new|second.?hand|identification|outer date|out ?dated`)],
+];
+
+/** Which flags a note suggests. `units` is how many units the return covers. */
+export function suggestFlags(note, { units = 1 } = {}) {
+  const text = fold(note);
+  if (!text) return [];
+  return FLAG_RULES.filter(([key, pattern]) => pattern.test(text) && (key !== 'all_units' || units > 1 || /\bboth\b|\bneither\b|\bnone of\b|\ball\b|\bevery\b|\beach\b/.test(text))).map(([key]) => key);
+}
+
 /** Returns that never reached a customer, or were samples, go by their platform code whatever the note says. */
 const BY_REASON = [
   ['amazon', /^UNDELIVERABLE/, 'not_customer', 'undeliverable'],
@@ -175,29 +193,32 @@ export function sortReturn({ channel, reason_code = '', reason = '', customer_co
 }
 
 /**
- * Re-run the rules on every return not sorted by a person (or only one import's returns, or the given ids).
- * → { sorted, unsorted }: how many got a category, and how many the rules couldn't place.
+ * Re-run the rules on every return (or only one import's returns, or the given ids). Categories set by a person are kept;
+ * flags are worked out for every return, except where a person turned one on or off.
+ * → { sorted, unsorted, flagged }: returns given a category, ones the rules couldn't place, and returns with a flag.
  */
 export async function sortReturns(db, { importId, ids } = {}) {
   const codebook = await getCodebook(db);
   const rank = new Map(codebook.map((c) => [c.key, c.tie_break_rank ?? Infinity]));
   const codebookIds = new Map(codebook.flatMap((c) => c.subreasons.map((s) => [`${c.key}/${s.key}`, [c.id, s.id]])));
 
-  const params = [];
-  let where = "category_source <> 'manual'";
-  if (importId) {
-    params.push(importId);
-    where += ' AND import_id = $1';
-  } else if (ids) {
-    params.push(ids);
-    where += ' AND id = ANY($1::uuid[])';
-  }
-  const { rows } = await db.query(`SELECT id, channel, reason_code, reason, customer_comment FROM returns WHERE ${where}`, params);
+  const scope = importId ? ['WHERE import_id = $1', [importId]] : ids ? ['WHERE id = ANY($1::uuid[])', [ids]] : ['', []];
+  const { rows } = await db.query(`SELECT id, channel, reason_code, reason, customer_comment, quantity, category_source FROM returns ${scope[0]}`, scope[1]);
 
   const cols = { id: [], category: [], subreason: [], source: [], why: [], note: [] };
+  const flags = { id: [], flag: [] };
+  let sorted = 0;
+  let unsorted = 0;
   for (const r of rows) {
     const s = sortReturn(r, { rank });
+    for (const flag of suggestFlags(s.note_clean, { units: r.quantity })) {
+      flags.id.push(r.id);
+      flags.flag.push(flag);
+    }
+    if (r.category_source === 'manual') continue;
     const [categoryId, subreasonId] = s.category ? codebookIds.get(`${s.category}/${s.subreason}`) : [null, null];
+    if (categoryId) sorted++;
+    else unsorted++;
     cols.id.push(r.id);
     cols.category.push(categoryId);
     cols.subreason.push(subreasonId);
@@ -213,6 +234,12 @@ export async function sortReturns(db, { importId, ids } = {}) {
       WHERE r.id = u.id AND r.category_source <> 'manual'`,
     [cols.id, cols.category, cols.subreason, cols.source, cols.why, cols.note],
   );
-  const sorted = cols.category.filter(Boolean).length;
-  return { sorted, unsorted: rows.length - sorted };
+  await db.query("DELETE FROM return_flags WHERE source = 'rule' AND return_id = ANY($1::uuid[])", [rows.map((r) => r.id)]);
+  await db.query(
+    `INSERT INTO return_flags (return_id, flag, source)
+     SELECT id, flag, 'rule' FROM unnest($1::uuid[], $2::text[]) AS u (id, flag)
+     ON CONFLICT (return_id, flag) DO NOTHING`,
+    [flags.id, flags.flag],
+  );
+  return { sorted, unsorted, flagged: new Set(flags.id).size };
 }
