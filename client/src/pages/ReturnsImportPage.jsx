@@ -11,7 +11,7 @@ import { MarketSelect } from '../components/Pickers.jsx';
 
 const HOW_TO = {
   amazon: 'In Seller Central: Reports → Fulfillment → Customer Returns (FBA). Download as .txt or .csv and upload it here.',
-  tiktok: 'In TikTok Shop Seller Center: Orders → Returns/Refunds → Export. Upload the .csv here.',
+  tiktok: 'In TikTok Shop Seller Center: Orders → Manage returns → All, then Export. Upload the .csv here.',
   other: 'Any .csv or .tsv with columns such as Date, Order ID, SKU, Product name, Quantity and Reason.',
 };
 
@@ -122,6 +122,11 @@ export default function ReturnsImportPage() {
             {s.errors > 0 && <span className="error-text">, {s.errors} rows can't be read</span>}
             {s.unmatched > 0 && <span className="warning-text">. {s.unmatched} aren't matched to a product yet; assign them on the Returns page after importing</span>}.
           </p>
+          {plan?.dateOrder && !result && (
+            <p className="muted small">
+              Dates read {plan.dateOrder === 'dmy' ? 'day first (28/09/2026 is 28 September)' : 'month first (09/28/2026 is September 28)'}. Check a few rows below before importing.
+            </p>
+          )}
           {plan?.grouped && !result && <p className="muted small">Amazon lists each returned unit on its own row. Units from the same order become one return, so returns count the same way on every channel.</p>}
           <div className="row">
             {!result && can('editor') && (

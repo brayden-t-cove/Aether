@@ -38,25 +38,50 @@ const HEADERS = {
   customer_comment: ['customercomments', 'customercomment', 'comments', 'buyercomment', 'buyercomments', 'returnreasondetails', 'buyernote'],
   disposition: ['detaileddisposition', 'disposition', 'condition', 'itemcondition'],
   status: ['status', 'returnstatus', 'refundstatus'],
+  unit_price: ['returnunitprice', 'unitprice', 'itemprice'],
   // Amazon's unit-level columns.
   license_plate: ['licenseplatenumber', 'lpn'],
   fnsku: ['fnsku'],
   fulfillment_center: ['fulfillmentcenterid', 'fulfillmentcenter'],
 };
 
+// The first of a field's header names that the report has, in HEADERS order (so TikTok's "Seller SKU" wins over its "SKU ID").
 function pick(row, field) {
-  for (const [h, v] of Object.entries(row || {})) if (HEADERS[field].includes(key(h))) return clean(v);
+  const byKey = new Map(Object.entries(row || {}).map(([h, v]) => [key(h), v]));
+  for (const name of HEADERS[field]) if (byKey.has(name)) return clean(byKey.get(name));
   return '';
 }
 
-/** Many report date formats → 'YYYY-MM-DD'; null if unreadable. */
-export function parseReportDate(value) {
+/** "$22.65", "USD 22.65", "1,022.65" → 22.65; null if not a number. */
+export function parseMoney(value) {
+  const s = clean(value).replace(/usd|us\$|\$|,|\s/gi, '');
+  if (!s || !/^\d+(\.\d+)?$/.test(s)) return null;
+  return Number(s);
+}
+
+const SLASHED = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+
+/**
+ * Whether a report writes nn/nn/yyyy dates day first ('dmy', as TikTok's export does: 28/09/2026) or month
+ * first ('mdy'). A part over 12 settles it; when every date fits both, TikTok reports are read day first.
+ */
+export function dateOrder(values, channel) {
+  for (const v of values) {
+    const m = clean(v).match(SLASHED);
+    if (m && Number(m[1]) > 12) return 'dmy';
+    if (m && Number(m[2]) > 12) return 'mdy';
+  }
+  return channel === 'tiktok' ? 'dmy' : 'mdy';
+}
+
+/** Many report date formats → 'YYYY-MM-DD'; null if unreadable. `order` says how to read nn/nn/yyyy. */
+export function parseReportDate(value, order = 'mdy') {
   const s = clean(value);
   if (!s) return null;
   let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (m) return valid(m[1], m[2], m[3]);
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (m) return valid(m[3], m[1], m[2]);
+  m = s.match(SLASHED);
+  if (m) return order === 'dmy' ? valid(m[3], m[2], m[1]) : valid(m[3], m[1], m[2]);
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
@@ -125,20 +150,23 @@ const identity = (r) =>
 /** Work out what an import would do. `rows` are objects keyed by the report's headers. */
 export async function planReturnsImport(db, { channel, marketId = null, rows }) {
   const matcher = await loadMatcher(db, channel);
-  if (channel === 'amazon' && rows.some((r) => pick(r, 'order_ref'))) return planAmazonUnits(db, { marketId, rows, matcher });
+  const order = dateOrder(rows.map((r) => pick(r, 'return_date')), channel);
+  const withDates = (plan) => ({ ...plan, dateOrder: rows.some((r) => SLASHED.test(pick(r, 'return_date'))) ? order : null });
+  if (channel === 'amazon' && rows.some((r) => pick(r, 'order_ref'))) return withDates(await planAmazonUnits(db, { marketId, rows, matcher, order }));
   const seen = new Set();
   const planned = [];
 
   for (const [i, raw] of rows.entries()) {
     const r = {
       line: i + 2, // header is line 1
-      return_date: parseReportDate(pick(raw, 'return_date')),
+      return_date: parseReportDate(pick(raw, 'return_date'), order),
       order_ref: pick(raw, 'order_ref').slice(0, 100),
       return_ref: pick(raw, 'return_ref').slice(0, 100),
       sku: pick(raw, 'sku').slice(0, 100),
       external_id: pick(raw, 'external_id').slice(0, 100),
       product_label: pick(raw, 'product_label').slice(0, 300),
       quantity: Math.max(1, Math.trunc(Number(pick(raw, 'quantity') || 1)) || 1),
+      unit_price: parseMoney(pick(raw, 'unit_price')),
       customer_comment: pick(raw, 'customer_comment').slice(0, 2000),
       disposition: pick(raw, 'disposition').slice(0, 100),
       status: pick(raw, 'status').slice(0, 100),
@@ -182,7 +210,7 @@ export async function planReturnsImport(db, { channel, marketId = null, rows }) 
     unmatched.set(k, u);
   }
 
-  return {
+  return withDates({
     channel,
     marketId,
     rows: planned,
@@ -195,7 +223,7 @@ export async function planReturnsImport(db, { channel, marketId = null, rows }) 
       unmatched: creates.filter((p) => !p.product_id).length,
     },
     unmatched: [...unmatched.values()].sort((a, b) => b.units - a.units),
-  };
+  });
 }
 
 // ── Amazon: one row per unit, grouped into one return per order ─────────────
@@ -228,14 +256,14 @@ export function rollUpUnits(units) {
   };
 }
 
-async function planAmazonUnits(db, { marketId, rows, matcher }) {
+async function planAmazonUnits(db, { marketId, rows, matcher, order }) {
   const occurrences = new Map();
   const units = [];
   for (const [i, raw] of rows.entries()) {
     const u = {
       line: i + 2,
       returned_at: pick(raw, 'return_date').slice(0, 50),
-      unit_date: parseReportDate(pick(raw, 'return_date')),
+      unit_date: parseReportDate(pick(raw, 'return_date'), order),
       order_ref: pick(raw, 'order_ref').slice(0, 100),
       license_plate: pick(raw, 'license_plate').slice(0, 100),
       sku: pick(raw, 'sku').slice(0, 100),
@@ -401,12 +429,13 @@ export async function runReturnsImport(tx, plan, { filename = '', userId }) {
     const { rowCount } = await tx.query(
       `INSERT INTO returns
          (import_id, product_id, channel, market_id, return_date, return_ref, order_ref, sku, external_id, product_label,
-          quantity, reason_code, reason, reason_group, customer_comment, disposition, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          quantity, reason_code, reason, reason_group, customer_comment, disposition, status, refund_value)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        ON CONFLICT DO NOTHING`,
       [
         importId, r.product_id, plan.channel, plan.marketId, r.return_date, r.return_ref, r.order_ref, r.sku, r.external_id,
         r.product_label, r.quantity, r.reason_code, r.reason, r.reason_group, r.customer_comment, r.disposition, r.status,
+        r.unit_price === null ? null : Math.round(r.unit_price * r.quantity * 100) / 100,
       ],
     );
     created += rowCount;
