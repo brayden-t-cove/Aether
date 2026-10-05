@@ -140,6 +140,18 @@ export const RETURN_FLAGS = {
   cites_claim: 'Cites listing / Live / ad claim',
   all_units: 'Multi-unit / all units affected',
   looks_used: 'Looks used / previously returned',
+  points_to_fault: 'Points to a camera fault',
+};
+
+/**
+ * What's behind a return, from its sub-reason (return_subreasons.cause). "Points to a camera fault" moves an
+ * unclear return into Product fault. Sub-reasons with no cause count as other reasons.
+ */
+export const RETURN_CAUSES = {
+  fault: 'Product fault',
+  conditions: 'Conditions & compatibility',
+  unclear: 'Connectivity, cause unclear',
+  other: 'Other reasons',
 };
 
 /** How confidently the customer-match workbook tied a return to a real customer, strongest first. */

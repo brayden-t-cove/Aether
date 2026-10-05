@@ -43,7 +43,7 @@ export default function ProductListings({ productId, editable }) {
           <Link to={`/returns?productId=${productId}&period=all`}>
             {t.units} {t.units === 1 ? 'unit' : 'units'} returned
           </Link>
-          {t.problem_units > 0 && `, ${Math.round((t.problem_units / t.share_units) * 100)}% for product problems`}
+          {t.fault_units > 0 && `, ${Math.round((t.fault_units / t.share_units) * 100)}% for product faults`}
           {returns.data.byCategory[0] && ` · top category: ${returns.data.byCategory[0].name}`}
         </p>
       )}

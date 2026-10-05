@@ -92,13 +92,13 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
   });
   afterAll(() => db?.end());
 
-  it('counts categories from the notes, leaving out samples, with product problems as a share of returns with a reason', async () => {
-    expect(await summary()).toMatchObject({ units: 5, set_aside_units: 1, share_units: 4, problem_units: 3, no_comment_units: 1, unsorted_units: 0 });
+  it('counts categories from the notes, leaving out samples', async () => {
+    expect(await summary()).toMatchObject({ units: 5, set_aside_units: 1, share_units: 4, fault_units: 1, unclear_units: 2, conditions_units: 1, no_comment_units: 1, unsorted_units: 0 });
     const { body } = await viewer.get('/api/returns/summary').expect(200);
-    expect(body.byCategory.map((c) => [c.key, c.units, c.product_problem])).toEqual([
-      ['connectivity', 2, true],
-      ['fit', 1, false],
-      ['performance', 1, true],
+    expect(body.byCategory.map((c) => [c.key, c.units])).toEqual([
+      ['connectivity', 2],
+      ['fit', 1],
+      ['performance', 1],
     ]);
   });
 
@@ -131,8 +131,8 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
     expect(overview.matches.find((m) => m.confidence === 'medium')).toMatchObject({ channel: 'tiktok', returns: 2, imported: 1 });
 
     // All returns: unchanged. Strong matches: the Low (fit) and unmatched (offline) TikTok returns drop out; Amazon has no rating and stays.
-    expect(await summary('match=all')).toMatchObject({ units: 5, share_units: 4, problem_units: 3 });
-    expect(await summary('match=strong')).toMatchObject({ units: 3, share_units: 2, problem_units: 2, no_comment_units: 1 });
+    expect(await summary('match=all')).toMatchObject({ units: 5, share_units: 4, fault_units: 1, unclear_units: 2 });
+    expect(await summary('match=strong')).toMatchObject({ units: 3, share_units: 2, fault_units: 1, unclear_units: 1, conditions_units: 0, no_comment_units: 1 });
     expect(await summary('match=strong&channel=amazon')).toMatchObject({ units: 1 });
     expect(await summary('match=nonsense')).toMatchObject({ units: 5 });
   });

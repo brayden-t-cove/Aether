@@ -46,7 +46,11 @@ test('the returns page charts the trend, reasons and products, with a table view
   const stat = (label) => page.locator('.stat', { hasText: label }).locator('.stat-value');
   // The carrier-damaged return never reached a customer, so it's set aside; it still waits for a product.
   await expect(stat('Units returned')).toHaveText('4');
-  await expect(stat('Product problems')).toHaveText('100%'); // the one return with a note: "Stopped working"
+  await expect(stat('Product fault')).toHaveText('100%'); // the one return with a note: "Stopped working"
+  const causes = page.getByRole('list', { name: 'Units by cause' });
+  await expect(causes).toContainText('Product fault');
+  await expect(causes).toContainText('Connectivity, cause unclear');
+  await expect(page.getByText('Set aside and not counted: 1 unit, 20% of all returns in this period (1 damaged by carrier).')).toBeVisible();
   await expect(stat('Top category')).toHaveText('Hardware Defect / DOA');
   await expect(stat('Not matched to a product')).toHaveText('1');
 

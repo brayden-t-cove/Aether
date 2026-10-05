@@ -30,7 +30,7 @@ function CodebookSelect({ codebook, value, onChange, label }) {
   );
 }
 
-/** The four flags. Editors switch them on and off; everyone else sees the ones that are on. */
+/** The flags. Editors switch them on and off; everyone else sees the ones that are on. */
 function Flags({ r, editable, onSaved }) {
   const [error, setError] = useState(null);
   const on = new Set(r.flags);
