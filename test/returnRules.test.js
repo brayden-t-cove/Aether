@@ -165,7 +165,7 @@ describe.skipIf(!TEST_DATABASE_URL)('sorting returns in the database', () => {
 
     await viewer.post('/api/returns/sort').expect(403);
     const res = await editor.post('/api/returns/sort').expect(200);
-    expect(res.body).toEqual({ sorted: 2, unsorted: 0 });
+    expect(res.body).toEqual({ sorted: 2, unsorted: 0, flagged: 0 });
 
     const rows = await byRef();
     expect(rows['R-10']).toMatchObject({ category: 'connectivity', category_source: 'rule' });

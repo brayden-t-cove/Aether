@@ -83,6 +83,9 @@ export function describeActivity(a) {
     case 'return':
       if (a.action === 'confirmed') return `${who} confirmed a return from ${label} as ${c.to}`;
       if (a.action === 'categorized') return `${who} filed a return from ${label} under ${c.to}`;
+      if (a.action === 'flag_added') return `${who} flagged a return from ${label}: ${c.flag}`;
+      if (a.action === 'flag_removed') return `${who} removed the flag "${c.flag}" from a return from ${label}`;
+      if (a.action === 'secondary_updated') return `${who} set a return from ${label} as also about ${c.categories?.length ? c.categories.join(', ') : 'nothing else'}`;
       break;
     case 'returns':
       if (a.action === 'sorted') return `${who} re-sorted returns (${c.sorted} sorted, ${c.unsorted} left for review)`;
