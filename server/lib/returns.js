@@ -12,7 +12,7 @@ const ONLINE = `COALESCE((SELECT CASE WHEN m.confidence IN ('high', 'medium') TH
                                      WHEN m.unmatched_reason = 'no_activation' THEN 'never' END
                             FROM return_matches m WHERE m.channel = r.channel AND m.return_ref = r.return_ref), 'unknown')`;
 
-function filters({ from, to, channel, productId, marketId, flag, match }, extra = []) {
+function filters({ from, to, channel, productId, marketId, flag, match, blank }, extra = []) {
   const where = [...extra];
   const params = [];
   const add = (sql, value) => {
@@ -26,6 +26,8 @@ function filters({ from, to, channel, productId, marketId, flag, match }, extra 
   if (marketId) add('r.market_id = ?', marketId);
   if (flag) add('EXISTS (SELECT 1 FROM return_flags f WHERE f.return_id = r.id AND f.flag = ? AND f.active)', flag);
   if (match === 'strong') where.push(`NOT ${WEAK_MATCH}`);
+  // No buyer note. Set-aside returns are left out, as everywhere the dashboard counts returns.
+  if (blank) where.push("r.note_clean = '' AND NOT EXISTS (SELECT 1 FROM return_categories sa WHERE sa.id = r.category_id AND sa.set_aside)");
   return { where: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
 }
 
@@ -85,6 +87,44 @@ export async function returnsSummary(db, opts = {}) {
         ORDER BY units DESC`),
   ]);
   return { totals: { ...totals[0], ...allTotals[0] }, setAside, byMonth, byCategory, topReasons, byProduct };
+}
+
+// Weeks run Monday to Sunday. "Today" is taken in MST (UTC−7, no daylight saving), the team's time zone for days.
+export const RETURNS_TZ = 'America/Phoenix';
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const mondayOf = (iso) => addDays(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7));
+
+/**
+ * Returns per week for the dashboard views: the last `weeks` Monday-to-Sunday weeks up to `end` (a date in
+ * the last week; default today in MST). Each row is one week × channel × product × category × cause × whether
+ * the buyer left a note, so the page can add them up any way it needs. Set-aside returns are left out, as on
+ * the summary. A week is partial until its Sunday has passed in MST.
+ */
+export async function returnsWeekly(db, { weeks = 12, end, ...opts } = {}) {
+  const { rows: [{ today }] } = await db.query(`SELECT (now() AT TIME ZONE '${RETURNS_TZ}')::date::text AS today`);
+  const count = Math.min(Math.max(Number(weeks) || 12, 2), 52);
+  const last = mondayOf(end || today);
+  const list = Array.from({ length: count }, (_, i) => addDays(last, (i - count + 1) * 7));
+  const { where, params } = filters({ ...opts, from: list[0], to: addDays(last, 6) }, ['NOT COALESCE(c.set_aside, false)']);
+  const { rows } = await db.query(
+    `SELECT date_trunc('week', r.return_date)::date::text AS week, r.channel, r.product_id, p.name AS product_name,
+            c.key AS category_key, c.name AS category_name,
+            CASE WHEN c.in_share THEN ${CAUSE} END AS cause,
+            r.note_clean = '' AS blank,
+            count(*)::int AS returns, sum(r.quantity)::int AS units
+       FROM returns r LEFT JOIN return_categories c ON c.id = r.category_id
+       LEFT JOIN return_subreasons s ON s.id = r.subreason_id LEFT JOIN products p ON p.id = r.product_id
+      ${where}
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8`,
+    params,
+  );
+  const { rows: [latest] } = await db.query('SELECT max(return_date)::text AS date FROM returns');
+  return {
+    today,
+    latestReturn: latest.date,
+    weeks: list.map((week) => ({ week, end: addDays(week, 6), partial: addDays(week, 6) >= today })),
+    rows,
+  };
 }
 
 // A return's active flags and secondary category keys, as arrays.

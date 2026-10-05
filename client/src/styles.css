@@ -1497,3 +1497,15 @@ table.comparison .luna-col {
     flex-basis: 100%;
   }
 }
+.total-row td {
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+}
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.page-tabs .tab {
+  white-space: nowrap;
+}

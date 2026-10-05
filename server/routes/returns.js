@@ -11,6 +11,7 @@ import {
   assignReturns,
   listReturns,
   returnsSummary,
+  returnsWeekly,
   REVIEW_VIEW_KEYS,
   reviewQueue,
   setReturnCategory,
@@ -33,6 +34,7 @@ function readFilters(q) {
     marketId: isUuid(q.marketId) ? q.marketId : undefined,
     flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
     match: Object.hasOwn(MATCH_VIEWS, q.match ?? '') ? q.match : undefined,
+    blank: q.blank === '1',
   };
 }
 
@@ -54,6 +56,16 @@ export function returnRoutes({ db, notify }) {
     '/api/returns/summary',
     requireAuth,
     asyncHandler(async (req, res) => res.json(await returnsSummary(db, readFilters(req.query)))),
+  );
+
+  // Returns per Monday-to-Sunday week, for the dashboard views. ?weeks=12&end=YYYY-MM-DD plus the usual filters.
+  router.get(
+    '/api/returns/weekly',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      // The weeks set the date range, so from/to are ignored.
+      res.json(await returnsWeekly(db, { ...readFilters(req.query), weeks: req.query.weeks, end: DATE.test(req.query.end ?? '') ? req.query.end : undefined }));
+    }),
   );
 
   router.get(

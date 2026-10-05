@@ -8,8 +8,11 @@ import { formatDate } from '../lib/format.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import { HBars, StackedColumns } from '../components/Charts.jsx';
 import { ProductSelect } from '../components/Pickers.jsx';
+import { BlankNotesView, ChannelsView, WeekOverWeek } from './ReturnsTrends.jsx';
 
 const PERIODS = { 3: 'Last 3 months', 6: 'Last 6 months', 12: 'Last 12 months', all: 'All time' };
+const VIEWS = { overview: 'Overview', weekly: 'Week over week', channels: 'Amazon vs TikTok', blank: 'Blank notes' };
+const WEEKS = { 8: 'Last 8 weeks', 12: 'Last 12 weeks', 26: 'Last 26 weeks', 52: 'Last 52 weeks' };
 const SERIES = [
   { key: 'amazon', label: 'Amazon', color: '--series-1' },
   { key: 'tiktok', label: 'TikTok', color: '--series-2' },
@@ -120,15 +123,21 @@ export default function ReturnsPage() {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const [showTable, setShowTable] = useState(false);
+  const view = Object.hasOwn(VIEWS, params.get('view') ?? '') ? params.get('view') : 'overview';
   const period = params.get('period') || '12';
-  const channel = params.get('channel') || '';
+  const weeks = Object.hasOwn(WEEKS, params.get('weeks') ?? '') ? params.get('weeks') : '12';
+  // Amazon vs TikTok compares the two channels, so it ignores the channel filter.
+  const channel = view === 'channels' ? '' : params.get('channel') || '';
   const productId = params.get('productId') || '';
   const match = params.get('match') || 'strong';
-  const query = new URLSearchParams({ match });
+  const filters = { match, ...(channel && { channel }), ...(productId && { productId }) };
+  const query = new URLSearchParams(filters);
   if (period !== 'all') query.set('from', monthsBack(Number(period)));
-  if (channel) query.set('channel', channel);
-  if (productId) query.set('productId', productId);
-  const { data, error, reload } = useLoad(`/api/returns/summary?${query}`);
+  const { data, error, reload } = useLoad(view === 'overview' ? `/api/returns/summary?${query}` : null);
+  // ?end=YYYY-MM-DD shows the weeks up to that date instead of up to today.
+  const weekly = useLoad(
+    view === 'overview' ? null : `/api/returns/weekly?${new URLSearchParams({ ...filters, weeks, ...(params.get('end') && { end: params.get('end') }) })}`,
+  );
 
   const setFilter = (key, value) => {
     const next = new URLSearchParams(params);
@@ -175,29 +184,52 @@ export default function ReturnsPage() {
         </div>
       </header>
 
+      <div className="tabs page-tabs" role="tablist" aria-label="Returns views">
+        {Object.entries(VIEWS).map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={view === k} className={`tab ${view === k ? 'active' : ''}`} onClick={() => setFilter('view', k === 'overview' ? '' : k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="toolbar">
         <div className="row">
-          <label className="inline">
-            Period
-            <select value={period} onChange={(e) => setFilter('period', e.target.value === '12' ? '' : e.target.value)}>
-              {Object.entries(PERIODS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="inline">
-            Channel
-            <select value={channel} onChange={(e) => setFilter('channel', e.target.value)}>
-              <option value="">All</option>
-              {Object.entries(CHANNELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
+          {view === 'overview' ? (
+            <label className="inline">
+              Period
+              <select value={period} onChange={(e) => setFilter('period', e.target.value === '12' ? '' : e.target.value)}>
+                {Object.entries(PERIODS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label className="inline">
+              Weeks
+              <select value={weeks} onChange={(e) => setFilter('weeks', e.target.value === '12' ? '' : e.target.value)}>
+                {Object.entries(WEEKS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {view !== 'channels' && (
+            <label className="inline">
+              Channel
+              <select value={channel} onChange={(e) => setFilter('channel', e.target.value)}>
+                <option value="">All</option>
+                {Object.entries(CHANNELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="inline">
             Product
             <ProductSelect value={productId} onChange={(id) => setFilter('productId', id)} emptyLabel="All" />
@@ -221,8 +253,22 @@ export default function ReturnsPage() {
           camera went online in the buyer's zip are kept, as are returns it has no rating for, including all of Amazon.
         </p>
       )}
-      <ErrorNote error={error} />
-      {!data ? (
+      {view !== 'overview' && (
+        <>
+          <ErrorNote error={weekly.error} />
+          {!weekly.data ? (
+            !weekly.error && <p className="muted">Loading…</p>
+          ) : view === 'weekly' ? (
+            <WeekOverWeek data={weekly.data} />
+          ) : view === 'channels' ? (
+            <ChannelsView data={weekly.data} />
+          ) : (
+            <BlankNotesView data={weekly.data} query={filters} />
+          )}
+        </>
+      )}
+      {view === 'overview' && <ErrorNote error={error} />}
+      {view !== 'overview' ? null : !data ? (
         !error && <p className="muted">Loading…</p>
       ) : t.units === 0 ? (
         <div className="card empty">
@@ -387,7 +433,7 @@ export default function ReturnsPage() {
         </>
       )}
 
-      <Unmatched onAssigned={reload} />
+      {view === 'overview' && <Unmatched onAssigned={reload} />}
     </div>
   );
 }
