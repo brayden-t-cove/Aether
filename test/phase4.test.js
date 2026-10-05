@@ -11,10 +11,10 @@ const AMAZON = [
   { 'return-date': '2026-09-05', 'order-id': '111-5', sku: 'W4-SKU', 'product-name': 'Luna W4 window camera', quantity: '1', reason: 'NOT_AS_DESCRIBED', 'license-plate-number': 'LPN5' },
 ];
 
-// Shaped like a TikTok Shop returns export: free-text reasons, no license plate.
+// Shaped like a TikTok Shop returns export: free-text reasons, no license plate, dates day first.
 const TIKTOK = [
-  { 'Order ID': 'TT-1', 'Return Order ID': 'R-1', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': "Product doesn't work", 'Time Requested': '09/10/2026 08:00:00' },
-  { 'Order ID': 'TT-2', 'Return Order ID': 'R-2', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': 'No longer needed', 'Time Requested': '09/12/2026 08:00:00' },
+  { 'Order ID': 'TT-1', 'Return Order ID': 'R-1', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': "Product doesn't work", 'Time Requested': '10/09/2026 08:00:00' },
+  { 'Order ID': 'TT-2', 'Return Order ID': 'R-2', 'Product Name': 'Luna Doorbell Cam Pro', 'Seller SKU': 'DB-PRO', Quantity: '1', 'Return Reason': 'No longer needed', 'Time Requested': '12/09/2026 08:00:00' },
 ];
 
 describe('returns parsing helpers', () => {
@@ -71,7 +71,7 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 4: listings, returns, comparisons', (
     it('previews Amazon rows: matches by listing, model and SKU, flags errors, writes nothing', async () => {
       await viewer.agent.post('/api/returns/import').send({ channel: 'amazon', rows: AMAZON, dryRun: true }).expect(403);
       const { body } = await ecom.agent.post('/api/returns/import').send({ channel: 'amazon', market_id: market.US.id, rows: AMAZON, dryRun: true }).expect(200);
-      expect(body.summary).toEqual({ rows: 5, create: 4, units: 5, duplicates: 0, errors: 1, unmatched: 1 });
+      expect(body.summary).toEqual({ rows: 5, create: 4, units: 5, added: 0, duplicates: 0, errors: 1, unmatched: 1 });
       expect(body.rows.find((r) => r.line === 5)).toMatchObject({ action: 'error', error: expect.stringMatching(/date/) });
       expect(body.rows.find((r) => r.line === 6)).toMatchObject({ product_name: 'Window Camera' }); // matched by model W4 in the name
       expect(body.unmatched).toEqual([expect.objectContaining({ external_id: 'B0MYSTERY', units: 1 })]);
