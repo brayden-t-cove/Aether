@@ -11,7 +11,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and th
 - **Products** are Luna's catalog, marked Upcoming, Active or Sunset.
 - **Markets** hold each country's plug types, voltage, required marks and languages. US, CA, UK, EU and AU are set up at first.
 - **Projects** tie a product to a market (for a launch) with an owner, a target date and a state.
-- **Checklist items** belong to a project, each with a category, owner, due date, state, evidence link and notes.
+- **Checklist items** belong to a project, each with a category, owner, due date, state, evidence link and a dated thread of updates. The checklist is a list grouped by stage: tick an item off from its row, or click its title to open a side panel with its updates, details and dependencies (`?item=<id>` links straight to it).
 - **Waits on:** an item can wait on other items, even in another project. An item can't be marked Done while something it waits on is still open, and loops are refused.
 - **Blocked vs waiting:** *Blocked* means someone marked the item Blocked (an outside problem). *Waiting* means it is waiting on an earlier step, which is normal. The dashboard counts only Blocked items, and shows how many other items each one holds up.
 - **Starting checklists** (`server/lib/templates.js`) come from the team's launch checklists and are organised in stages. *US launch (new product)* runs from validating the product through samples, manual and packaging, listings, launch and post launch. *International launch* takes an existing product into a new country and fills in that market's marks, plug, voltage and languages. Items already wait on the steps they depend on.

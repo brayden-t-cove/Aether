@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ITEM_CATEGORIES, PROJECT_TYPES, STATE_LABELS, STATES } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
@@ -7,6 +7,7 @@ import { useLoad } from '../lib/useLoad.js';
 import { formatDate, today } from '../lib/format.js';
 import ActivityList from '../components/ActivityList.jsx';
 import ChecklistItem from '../components/ChecklistItem.jsx';
+import ItemPanel from '../components/ItemPanel.jsx';
 import ErrorNote from '../components/ErrorNote.jsx';
 import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
@@ -29,6 +30,32 @@ function groupItems(items) {
   return Object.keys(ITEM_CATEGORIES)
     .map((key) => ({ key, label: ITEM_CATEGORIES[key], items: items.filter((i) => i.category === key) }))
     .filter((g) => g.items.length);
+}
+
+/** One stage of the checklist: a heading that folds the section away, with its done count. */
+function ChecklistSection({ group, children }) {
+  const done = group.items.filter((i) => i.state === 'done').length;
+  // A stage that's finished starts folded away, so open work is what you see first.
+  const [open, setOpen] = useState(done < group.items.length);
+  return (
+    <div className={`item-group ${open ? '' : 'is-closed'}`}>
+      <h3 className="group-title">
+        <button className="group-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          <svg className="chevron" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {group.number && <span className="stage-number">{group.number}</span>}
+          <span>{group.label}</span>
+          <span className="muted small group-count">
+            {done} of {group.items.length} done
+          </span>
+        </button>
+      </h3>
+      <div className="drawer" inert={!open}>
+        <ul className="items">{children}</ul>
+      </div>
+    </div>
+  );
 }
 
 function ProjectDetailsForm({ project, users, onSaved, onCancel }) {
@@ -148,6 +175,7 @@ export default function ProjectPage() {
   const { id } = useParams();
   const { can } = useAuth();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const { data, error, reload } = useLoad(`/api/projects/${id}`);
   const users = useLoad('/api/users');
   const [editing, setEditing] = useState(false);
@@ -161,6 +189,15 @@ export default function ProjectPage() {
   const late = project.state !== 'done' && project.target_date && project.target_date < today();
   const groups = groupItems(items);
   const stages = [...new Set(items.map((i) => i.stage).filter(Boolean))];
+  // ?item=<id> opens that item's panel (the dashboard links here); closing it takes the parameter off.
+  const selectedId = params.get('item');
+  const selected = items.find((i) => i.id === selectedId) || null;
+  const select = (itemId) => {
+    const next = new URLSearchParams(params);
+    if (itemId) next.set('item', itemId);
+    else next.delete('item');
+    setParams(next, { replace: Boolean(selectedId && itemId) });
+  };
 
   async function setState(state) {
     setActionError(null);
@@ -271,33 +308,55 @@ export default function ProjectPage() {
 
       {project.description && !editing && <p className="pre">{project.description}</p>}
 
-      <section className="card flush">
-        <h2 className="pad-h">Checklist</h2>
+      <section className="card flush checklist">
+        <div className="checklist-head">
+          <h2>Checklist</h2>
+          <span className="muted small">
+            {project.done_count} of {project.item_count} done
+          </span>
+        </div>
         {items.length === 0 && <p className="muted pad">No items yet.{editable && ' Add the first one below.'}</p>}
-        {groups.map((g) => (
-          <div key={g.key} className="item-group">
-            <h3 className="group-title">
-              {g.number && <span className="stage-number">{g.number}</span>}
-              {g.label} <span className="muted small">{g.items.filter((i) => i.state === 'done').length}/{g.items.length}</span>
-            </h3>
-            <ul className="items">
-              {g.items.map((item) => (
-                <ChecklistItem
-                  key={`${item.id}:${item.updated_at}`}
-                  item={item}
-                  projectId={project.id}
-                  allItems={items}
-                  users={users.data.users}
-                  stages={stages}
-                  editable={editable}
-                  onChange={reload}
-                />
-              ))}
-            </ul>
+        {items.length > 0 && (
+          <div className="list-columns" aria-hidden="true">
+            <span />
+            <span>Item</span>
+            <span>Owner</span>
+            <span>Due</span>
+            <span>State</span>
+            <span />
           </div>
+        )}
+        {groups.map((g) => (
+          <ChecklistSection key={g.key} group={g}>
+            {g.items.map((item) => (
+              <ChecklistItem
+                key={`${item.id}:${item.updated_at}`}
+                item={item}
+                projectId={project.id}
+                editable={editable}
+                selected={item.id === selectedId}
+                onSelect={select}
+                onChange={reload}
+              />
+            ))}
+          </ChecklistSection>
         ))}
         {editable && <AddItemForm projectId={project.id} stages={stages} onAdded={reload} />}
       </section>
+
+      {selected && (
+        <ItemPanel
+          key={`${selected.id}:${selected.updated_at}`}
+          item={selected}
+          projectId={project.id}
+          allItems={items}
+          users={users.data.users}
+          stages={stages}
+          editable={editable}
+          onChange={reload}
+          onClose={() => select(null)}
+        />
+      )}
 
       {project.product_id && <TestSessions projectId={project.id} />}
 

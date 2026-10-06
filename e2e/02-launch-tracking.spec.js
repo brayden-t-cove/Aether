@@ -55,7 +55,7 @@ test('an editor adds a product and starts a US launch from the checklist templat
   await expect(stages).toHaveCount(7);
   await expect(stages.first()).toContainText('Validate the product');
   await expect(stages.last()).toContainText('Post launch');
-  await expect(page.getByRole('button', { name: 'FCC certification complete' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'FCC certification complete', exact: true })).toBeVisible();
 });
 
 test("an item can't be done while it waits on something open; blocking one posts to Slack", async ({ page, request }) => {
@@ -85,12 +85,13 @@ test("an item can't be done while it waits on something open; blocking one posts
   await setState('Full technical specs defined', 'done', 'Done');
   await expect(state('Full technical specs defined')).toHaveValue('done');
 
-  // Open an item with its arrow and edit it: owner, due date in the past (overdue). Notes are dated updates, not a field.
-  const title = row('Mold design').getByRole('button', { name: 'Mold design' });
+  // Open an item into its side panel and edit it: owner, due date in the past (overdue). Notes are dated updates, not a field.
+  const title = row('Mold design').getByRole('button', { name: 'Mold design', exact: true });
   await expect(title).toHaveAttribute('aria-expanded', 'false');
   await title.click();
   await expect(title).toHaveAttribute('aria-expanded', 'true');
-  const open = page.locator('li.item.is-open');
+  await expect(page).toHaveURL(/\?item=/);
+  const open = page.getByRole('complementary', { name: 'Details of Mold design' });
   await expect(field(open, 'Notes', 'textarea')).toHaveCount(0);
   await open.getByLabel('New update on Mold design').fill('Waiting on factory drawings');
   await open.getByRole('button', { name: 'Post update' }).click();
@@ -100,6 +101,16 @@ test("an item can't be done while it waits on something open; blocking one posts
   await open.getByRole('button', { name: 'Save' }).click();
   await expect(row('Mold design')).toContainText('Overdue');
   await expect(row('Mold design').locator('.item-latest')).toContainText('“Waiting on factory drawings” — Ella Editor');
+  // Escape closes the panel.
+  await open.press('Escape');
+  await expect(open).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\?item=/);
+
+  // The tick is the quick way to finish an item, and to reopen it.
+  await row('Comparative analysis').getByRole('button', { name: 'Reopen: Comparative analysis' }).click();
+  await expect(state('Comparative analysis')).toHaveValue('in_progress');
+  await row('Comparative analysis').getByRole('button', { name: 'Tick off: Comparative analysis' }).click();
+  await expect(state('Comparative analysis')).toHaveValue('done');
 
   const before = (await slackMessages(request)).length;
   await state('Integration discussion').selectOption('blocked');
@@ -125,7 +136,8 @@ test("an item can't be done while it waits on something open; blocking one posts
   await updates.getByRole('button', { name: 'Save' }).click();
   await expect(updates.locator('.update').last()).toContainText('promised by Thursday');
   await expect(updates.locator('.update').last()).toContainText('edited');
-  await row('Integration discussion').locator('.item-title').click();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect(updates).toHaveCount(0);
   await expect(row('Integration discussion').locator('.item-latest')).toContainText('2 updates');
 
   // Add a custom item into a stage.
@@ -167,8 +179,8 @@ test('international launch template fills in the market details', async ({ page 
   await field(page, 'Market', 'select').selectOption({ label: 'UK · United Kingdom' });
   await expect(field(page, 'Project name')).toHaveValue('Sample Doorbell — UK launch');
   await page.getByRole('button', { name: 'Create project' }).click();
-  await expect(page.getByRole('button', { name: 'Identify certification requirements for the camera and accessories (e.g. UKCA)' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /type G plug, 230V/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Identify certification requirements for the camera and accessories (e.g. UKCA)', exact: true })).toBeVisible();
+  await expect(page.locator('.item-title', { hasText: /type G plug, 230V/ })).toBeVisible();
 });
 
 test('markets page lists the seeded markets and editors can add one', async ({ page }) => {
