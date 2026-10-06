@@ -57,6 +57,9 @@ export async function returnsSummary(db, opts = {}) {
               ${cause('unclear')} AS unclear_units, ${cause('other')} AS other_cause_units,
               ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'online'`)} AS unclear_online_units,
               ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'never'`)} AS unclear_never_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND r.channel <> 'tiktok'`)} AS unclear_not_tiktok_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND r.channel = 'tiktok'
+                        AND NOT EXISTS (SELECT 1 FROM return_matches m WHERE m.channel = r.channel AND m.return_ref = r.return_ref)`)} AS unclear_not_in_workbook_units,
               ${units("c.key = 'no_comment'")} AS no_comment_units,
               ${units('r.category_id IS NULL')} AS unsorted_units,
               min(r.return_date)::text AS first_date, max(r.return_date)::text AS last_date

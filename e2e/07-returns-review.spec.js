@@ -38,6 +38,9 @@ test('a note the rules don’t recognise lands on the Other page and is filed by
   await page.goto('/returns/import');
   await page.getByLabel('Channel').selectOption('tiktok');
   await page.getByLabel('Returns report file').setInputFiles('e2e/fixtures/tiktok-returns.csv');
+  // The preview shows the Buyer Note was read.
+  await expect(page.getByText('1 of 1 rows have a note from the buyer (the Buyer Note column).')).toBeVisible();
+  await expect(page.locator('td.import-note')).toHaveText('Thanks anyway');
   await page.getByRole('button', { name: 'Import', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Import complete' })).toBeVisible();
 

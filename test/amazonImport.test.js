@@ -75,7 +75,7 @@ describe.skipIf(!TEST_DATABASE_URL)('importing an Amazon returns report', () => 
   it('previews one return per order', async () => {
     const { body } = await editor.post('/api/returns/import').send({ channel: 'amazon', rows: SEPTEMBER, dryRun: true }).expect(200);
     expect(body.grouped).toBe(true);
-    expect(body.summary).toEqual({ rows: 5, create: 3, units: 5, added: 0, duplicates: 0, errors: 1, unmatched: 3 });
+    expect(body.summary).toEqual({ rows: 5, create: 3, units: 5, added: 0, duplicates: 0, errors: 1, unmatched: 3, with_note: 2 });
     expect(body.rows.find((r) => r.line === 6)).toMatchObject({ action: 'error', error: 'No order ID' });
     expect(body.rows.find((r) => r.line === 2)).toMatchObject({ action: 'create', order_ref: '111-0000001-0000001' });
   });

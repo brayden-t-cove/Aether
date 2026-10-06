@@ -53,7 +53,7 @@ Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hide
 - **Listings:** each product's marketplace listings (Amazon ASIN, TikTok product ID, SKU, link, state), shown on the product page.
 - **Returns:** **Returns → Import returns** reads Amazon's FBA customer returns report, TikTok Shop's returns export, or any similar CSV.
   - Rows are matched to products, and reasons are grouped (defect / not as described / changed mind / shipping).
-  - Re-importing never double counts, and admins can undo an import.
+  - Re-importing never double counts, and admins can undo an import. A return imported earlier without a buyer note takes the note from a later report that has one (TikTok and other channels; a note already there is never replaced). The preview shows each row's note and how many rows have one.
   - The Returns page shows monthly trends by channel, top reasons and a per-product breakdown.
   - Unmatched rows can be assigned to a product, which also teaches future imports.
   - Returns are sorted into categories from the buyer's own note (**Returns → Review returns** for the ones that need a person). The Returns page charts those categories, and what's behind them: **Product fault**, **Conditions & compatibility** (router, signal, fit), **Connectivity, cause unclear**, and other reasons. Each sub-reason has a cause; the "Points to a camera fault" flag (next to the router, other cameras work, support confirmed it) moves an unclear return into Product fault. Samples and returns that never reached a customer are set aside, but counted and shown as a share of the period's returns.

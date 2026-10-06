@@ -20,7 +20,7 @@ import {
   unmatchedReturns,
 } from '../lib/returns.js';
 import { getCodebook } from '../lib/returnCodebook.js';
-import { sortReturns } from '../lib/returnRules.js';
+import { cleanNote, sortReturns } from '../lib/returnRules.js';
 import { MAX_MATCH_ROWS, matchesOverview, planMatches, saveMatches } from '../lib/returnMatches.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -44,8 +44,10 @@ const publicPlan = (plan) => ({
   dateOrder: plan.dateOrder ?? null,
   summary: plan.summary,
   unmatched: plan.unmatched.slice(0, 50),
-  rows: plan.rows.slice(0, 200).map(({ line, action, error, reason_dup, return_date, order_ref, sku, external_id, product_label, quantity, reason, reason_group, product_name }) => ({
+  rows: plan.rows.slice(0, 200).map(({ line, action, error, reason_dup, return_date, order_ref, sku, external_id, product_label, quantity, reason, reason_group, product_name, customer_comment }) => ({
     line, action, error, reason_dup, return_date, order_ref, sku, external_id, product_label, quantity, reason, reason_group, product_name,
+    // The note as the Returns pages will show it (phone numbers removed), shortened for the preview.
+    note: cleanNote({ channel: plan.channel, comment: customer_comment, reason }).note.slice(0, 200),
   })),
 });
 

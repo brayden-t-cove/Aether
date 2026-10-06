@@ -144,6 +144,9 @@ async function loadMatcher(db, channel) {
   };
 }
 
+// Whether the buyer wrote something of their own: not blank, not only Amazon's menu choice, not only TikTok's reason.
+const hasOwnNote = (channel, r) => !!r.customer_comment && cleanNote({ channel, comment: r.customer_comment, reason: r.reason }).note !== '';
+
 const identity = (r) =>
   r.return_ref ? `ref:${r.return_ref.toLowerCase()}` : `c:${r.order_ref}|${r.sku}|${r.external_id}|${r.return_date}|${r.reason_code}|${r.quantity}`.toLowerCase();
 
@@ -189,16 +192,22 @@ export async function planReturnsImport(db, { channel, marketId = null, rows }) 
     planned.push({ ...r, ...matcher.match(r), action: 'create' });
   }
 
-  // Already imported? Compare against existing returns in the same date range.
+  // Already imported? Compare against existing returns in the same date range. One imported without a buyer note
+  // (from an export that didn't have the column) takes the note this report has, instead of being skipped.
   const dates = planned.filter((p) => p.action === 'create').map((p) => p.return_date).sort();
   if (dates.length) {
     const { rows: existing } = await db.query(
-      `SELECT return_ref, order_ref, sku, external_id, return_date::text AS return_date, reason_code, quantity
+      `SELECT id, return_ref, order_ref, sku, external_id, return_date::text AS return_date, reason_code, quantity, customer_comment
          FROM returns WHERE channel = $1 AND return_date BETWEEN $2 AND $3`,
       [channel, dates[0], dates.at(-1)],
     );
-    const have = new Set(existing.map(identity));
-    for (const p of planned) if (p.action === 'create' && have.has(identity(p))) Object.assign(p, { action: 'duplicate', reason_dup: 'Already imported' });
+    const have = new Map(existing.map((e) => [identity(e), e]));
+    for (const p of planned) {
+      const old = p.action === 'create' && have.get(identity(p));
+      if (!old) continue;
+      if (!old.customer_comment.trim() && p.customer_comment) Object.assign(p, { action: 'update', existing_id: old.id, reason_dup: 'Adds the buyer note' });
+      else Object.assign(p, { action: 'duplicate', reason_dup: 'Already imported' });
+    }
   }
 
   const creates = planned.filter((p) => p.action === 'create');
@@ -219,6 +228,9 @@ export async function planReturnsImport(db, { channel, marketId = null, rows }) 
       create: creates.length,
       units: creates.reduce((n, p) => n + p.quantity, 0),
       duplicates: planned.filter((p) => p.action === 'duplicate').length,
+      notes_added: planned.filter((p) => p.action === 'update').length,
+      // Rows the report gives a buyer note for, so the preview can show the column was read.
+      with_note: planned.filter((p) => p.action !== 'error' && hasOwnNote(channel, p)).length,
       errors: planned.filter((p) => p.action === 'error').length,
       unmatched: creates.filter((p) => !p.product_id).length,
     },
@@ -348,6 +360,7 @@ async function planAmazonUnits(db, { marketId, rows, matcher, order }) {
       duplicates: units.filter((u) => u.action === 'duplicate').length,
       errors: units.filter((u) => u.action === 'error').length,
       unmatched: creates.filter((r) => !r.product_id).length,
+      with_note: units.filter((u) => u.action !== 'error' && hasOwnNote('amazon', u)).length,
     },
     unmatched: [...unmatched.values()].sort((a, b) => b.units - a.units),
   };
@@ -440,7 +453,21 @@ export async function runReturnsImport(tx, plan, { filename = '', userId }) {
     );
     created += rowCount;
   }
+  // Returns imported earlier without a note get this report's, and are sorted again (unless sorted by hand).
+  const updates = plan.grouped ? [] : plan.rows.filter((r) => r.action === 'update');
+  const updated = [];
+  for (const r of updates) {
+    const { rows: hit } = await tx.query(
+      `UPDATE returns SET customer_comment = $2, note_clean = $3 WHERE id = $1 AND btrim(customer_comment) = '' RETURNING id`,
+      [r.existing_id, r.customer_comment, cleanNote({ channel: plan.channel, comment: r.customer_comment, reason: r.reason }).note],
+    );
+    if (hit[0]) updated.push(hit[0].id);
+  }
   const sorting = await sortReturns(tx, { importId });
+  if (updated.length) {
+    const resorted = await sortReturns(tx, { ids: updated });
+    for (const [k, n] of Object.entries(resorted)) if (typeof n === 'number') sorting[k] = (sorting[k] || 0) + n;
+  }
   const duplicates = plan.rows.filter((r) => r.action === 'duplicate').length + (plan.summary.create - created);
   const { rows } = await tx.query(
     'UPDATE return_imports SET created_count = $2, duplicate_count = $3, unmatched_count = $4 WHERE id = $1 RETURNING *',
@@ -450,8 +477,8 @@ export async function runReturnsImport(tx, plan, { filename = '', userId }) {
     entityType: 'returns_import',
     entityId: importId,
     action: 'imported',
-    changes: { channel: plan.channel, rows: created, units: plan.summary.units, label: filename || plan.channel, ...sorting },
+    changes: { channel: plan.channel, rows: created, units: plan.summary.units, notes_added: updated.length, label: filename || plan.channel, ...sorting },
     userId,
   });
-  return rows[0];
+  return { ...rows[0], notes_added: updated.length };
 }

@@ -68,8 +68,9 @@ describe.skipIf(!TEST_DATABASE_URL)('importing a TikTok returns export', () => {
   it('previews with dates read day first', async () => {
     const { body } = await editor.post('/api/returns/import').send({ channel: 'tiktok', rows: ROWS, dryRun: true }).expect(200);
     expect(body.dateOrder).toBe('dmy');
-    expect(body.summary).toMatchObject({ create: 3, units: 4, errors: 0 });
+    expect(body.summary).toMatchObject({ create: 3, units: 4, errors: 0, with_note: 2 });
     expect(body.rows.map((r) => r.return_date)).toEqual(['2026-09-05', '2026-09-28', '2026-09-28']);
+    expect(body.rows.map((r) => r.note)).toEqual(['Both keep going offline', 'Too big for the porch light', '']);
   });
 
   it('imports one return per request with its value, keeping rejected refunds and setting samples aside', async () => {
@@ -96,5 +97,37 @@ describe.skipIf(!TEST_DATABASE_URL)('importing a TikTok returns export', () => {
   it('never double counts a re-imported export', async () => {
     const { body } = await editor.post('/api/returns/import').send({ channel: 'tiktok', rows: ROWS, dryRun: true }).expect(200);
     expect(body.summary).toMatchObject({ create: 0, duplicates: 3 });
+  });
+
+  it('fills in buyer notes on returns imported earlier without them', async () => {
+    // An older export, or one saved without the Buyer Note column.
+    const noNotes = (ref, date) => {
+      const r = request({ 'Return Order ID': `${ref}\t`, 'Time Requested': date });
+      delete r['Buyer Note'];
+      return r;
+    };
+    await editor.post('/api/returns/import').send({ channel: 'tiktok', rows: [noNotes('4000000000000000010', '20/09/2026 10:00:00'), noNotes('4000000000000000011', '20/09/2026 11:00:00')] }).expect(200);
+    expect(await row('4000000000000000010')).toMatchObject({ note_clean: '', category: 'no_comment' });
+    // Someone sorted one by hand in the meantime: that stays, the note is still added.
+    await db.query("UPDATE returns SET category_source = 'manual' WHERE return_ref = '4000000000000000011'");
+
+    const withNotes = [
+      request({ 'Return Order ID': '4000000000000000010\t', 'Time Requested': '20/09/2026 10:00:00', 'Buyer Note': 'Camera keeps going offline every night' }),
+      request({ 'Return Order ID': '4000000000000000011\t', 'Time Requested': '20/09/2026 11:00:00', 'Buyer Note': 'Call me on 555-123-4567, it never paired' }),
+    ];
+    const { body: preview } = await editor.post('/api/returns/import').send({ channel: 'tiktok', rows: withNotes, dryRun: true }).expect(200);
+    expect(preview.summary).toMatchObject({ create: 0, notes_added: 2, duplicates: 0 });
+    expect(preview.rows.map((r) => [r.action, r.reason_dup])).toEqual([['update', 'Adds the buyer note'], ['update', 'Adds the buyer note']]);
+    expect(preview.rows[1].note).toBe('Call me on [phone removed], it never paired');
+
+    const { body } = await editor.post('/api/returns/import').send({ channel: 'tiktok', rows: withNotes }).expect(200);
+    expect(body.import).toMatchObject({ created_count: 0, notes_added: 2 });
+    expect(await row('4000000000000000010')).toMatchObject({ note_clean: 'Camera keeps going offline every night', category: 'connectivity', category_source: 'rule' });
+    expect(await row('4000000000000000011')).toMatchObject({ note_clean: 'Call me on [phone removed], it never paired', category: 'no_comment', category_source: 'manual' });
+
+    // A note already there is never overwritten.
+    const changed = withNotes.map((r) => ({ ...r, 'Buyer Note': 'Something else' }));
+    const { body: again } = await editor.post('/api/returns/import').send({ channel: 'tiktok', rows: changed, dryRun: true }).expect(200);
+    expect(again.summary).toMatchObject({ notes_added: 0, duplicates: 2 });
   });
 });

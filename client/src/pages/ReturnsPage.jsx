@@ -46,6 +46,19 @@ const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
  * The cause bars. Once the customer-match workbook says whether cameras went online, the unclear group is split:
  * went online then failed, never went online, and no activation data (Low matches, Amazon, no workbook).
  */
+/** Why some unclear returns have no activation data: the workbook only covers TikTok, and only returns it lists. */
+function unknownWhy(t, unknown) {
+  const notTiktok = t.unclear_not_tiktok_units || 0;
+  const notListed = t.unclear_not_in_workbook_units || 0;
+  const weak = Math.max(0, unknown - notTiktok - notListed);
+  const parts = [
+    notTiktok && `${notTiktok} units from Amazon or other channels (the workbook covers TikTok only)`,
+    notListed && `${notListed} TikTok units not in the match workbook yet`,
+    weak && `${weak} units with a weak match or order not found`,
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
 function causeRows(t) {
   const row = (key, label, value, note) => ({ key, label, value, note });
   const rows = [row('fault', RETURN_CAUSES.fault, t.fault_units, CAUSE_HINTS.fault), row('conditions', RETURN_CAUSES.conditions, t.conditions_units, CAUSE_HINTS.conditions)];
@@ -55,7 +68,7 @@ function causeRows(t) {
       row('online', 'Unclear: went online, then failed', t.unclear_online_units, 'The buyer’s camera was activated, so it worked at least once'),
       row('never', 'Unclear: never went online', t.unclear_never_units, 'No camera was activated in the buyer’s zip, so it likely never got past setup'),
     );
-    if (unknown) rows.push(row('unknown', 'Unclear: no activation data', unknown, 'Amazon, weak matches, or no workbook yet'));
+    if (unknown) rows.push(row('unknown', 'Unclear: no activation data', unknown, unknownWhy(t, unknown)));
   } else {
     rows.push(row('unclear', RETURN_CAUSES.unclear, t.unclear_units, CAUSE_HINTS.unclear));
   }

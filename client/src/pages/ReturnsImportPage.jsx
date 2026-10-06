@@ -16,6 +16,9 @@ const HOW_TO = {
   other: 'Any .csv or .tsv with columns such as Date, Order ID, SKU, Product name, Quantity and Reason.',
 };
 
+const ROUNDED = (n) =>
+  `${n} Return Order IDs are stored as numbers, and Excel has rounded them, so they can't be matched. Format the Return Order ID column as Text and paste the IDs in again from the TikTok export, then upload again.`;
+
 /** Upload the customer-match workbook: only each return's ID and match confidence are sent. */
 function MatchUpload() {
   const { can } = useAuth();
@@ -38,9 +41,10 @@ function MatchUpload() {
     setSummary(null);
     setSaved(false);
     try {
-      const { matches, used } = await readMatchWorkbook(file);
+      const { matches, used, rounded } = await readMatchWorkbook(file);
+      if (!matches.length && rounded) throw new Error(ROUNDED(rounded));
       if (!matches.length) throw new Error('No returns found. The workbook needs a "Return Order ID" column and a "Match Confidence" column (or an "Unmatched Returns" tab).');
-      const next = { filename: file.name, matches, used };
+      const next = { filename: file.name, matches, used, rounded };
       setUpload(next);
       setSummary((await send(next, true)).summary);
     } catch (err) {
@@ -103,6 +107,7 @@ function MatchUpload() {
             Read {upload.used.map((u) => `${u.rows} rows from "${u.sheet}"`).join(' and ')}. A return listed more than once keeps its strongest match.
             {s.notImported > 0 && ` ${s.notImported} of these returns aren't in Aether yet; their match applies once the TikTok export that has them is imported.`}
           </p>
+          {upload.rounded > 0 && <p className="warning-text small">{ROUNDED(upload.rounded)}</p>}
           {!saved && (
             <button className="btn primary" onClick={save} disabled={busy || s.added + s.changed === 0}>
               {busy ? 'Saving…' : 'Save matches'}
@@ -217,10 +222,18 @@ export default function ReturnsImportPage() {
           <p>
             {result ? `Added ${result.import.created_count} returns` : `${s.create} returns (${s.units} units) will be added`}
             {s.added > 0 && `, ${s.added} more ${s.added === 1 ? 'unit' : 'units'} for returns already imported`}
+            {(result ? result.import.notes_added : s.notes_added) > 0 &&
+              `, ${result ? result.import.notes_added : s.notes_added} already imported ${result ? 'got' : 'will get'} their buyer note`}
             {s.duplicates > 0 && `, ${s.duplicates} already imported (skipped)`}
             {s.errors > 0 && <span className="error-text">, {s.errors} rows can't be read</span>}
             {s.unmatched > 0 && <span className="warning-text">. {s.unmatched} aren't matched to a product yet; assign them on the Returns page after importing</span>}.
           </p>
+          {s.with_note != null && (
+            <p className="muted small">
+              {s.with_note} of {s.rows} rows have a note from the buyer
+              {channel === 'tiktok' ? ' (the Buyer Note column)' : channel === 'amazon' ? ' (Customer Comments, beyond the menu choice)' : ''}.
+            </p>
+          )}
           {plan?.dateOrder && !result && (
             <p className="muted small">
               Dates read {plan.dateOrder === 'dmy' ? 'day first (28/09/2026 is 28 September)' : 'month first (09/28/2026 is September 28)'}. Check a few rows below before importing.
@@ -229,7 +242,7 @@ export default function ReturnsImportPage() {
           {plan?.grouped && !result && <p className="muted small">Amazon lists each returned unit on its own row. Units from the same order become one return, so returns count the same way on every channel.</p>}
           <div className="row">
             {!result && can('editor') && (
-              <button className="btn primary" onClick={runImport} disabled={busy || s.create === 0}>
+              <button className="btn primary" onClick={runImport} disabled={busy || s.create + (s.added || 0) + (s.notes_added || 0) === 0}>
                 {busy ? 'Importing…' : 'Import'}
               </button>
             )}
@@ -249,6 +262,7 @@ export default function ReturnsImportPage() {
                     <th>Product</th>
                     <th className="num">Qty</th>
                     <th>Reason</th>
+                    <th>Buyer&apos;s note</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -266,8 +280,10 @@ export default function ReturnsImportPage() {
                         {r.reason}
                         {r.reason_group && <div className="muted">{REASON_GROUPS[r.reason_group]}</div>}
                       </td>
+                      <td className="small import-note">{r.note ? <span title={r.note}>{r.note}</span> : <span className="muted">—</span>}</td>
                       <td className="small">
                         {r.action === 'create' && <span className="tag action-create">New</span>}
+                        {r.action === 'update' && <span className="tag action-create">{r.reason_dup}</span>}
                         {r.action === 'add' && <span className="tag action-create">{r.reason_dup}</span>}
                         {r.action === 'duplicate' && <span className="tag action-skip">{r.reason_dup}</span>}
                         {r.action === 'error' && <span className="error-text">{r.error}</span>}
