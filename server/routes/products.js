@@ -8,6 +8,8 @@ import { parse } from '../lib/validate.js';
 import { listProjects } from '../lib/projects.js';
 import { pruneOrphanAttachments } from '../lib/attachments.js';
 import { vendorsForProduct } from '../lib/vendors.js';
+import { markDistinct, mergeProducts, suggestDuplicates } from '../lib/productMerge.js';
+import { v } from '../lib/validate.js';
 import {
   createProduct,
   deleteProduct,
@@ -25,14 +27,21 @@ async function loadProduct(db, id) {
   return product;
 }
 
-// Odyssey owns these fields for products that came from Odyssey; everything else stays editable here.
+// Odyssey owns these fields for products that came from Odyssey, and the model and manufacturer of Aether products
+// linked to Odyssey; everything else stays editable here.
 const SYNCED_FIELDS = ['name', 'model', 'manufacturer', 'category', 'lifecycle'];
+const LINKED_FIELDS = ['model', 'manufacturer'];
 
 function assertEditable(product, fields) {
-  if (product.source !== 'odyssey') return;
-  const locked = SYNCED_FIELDS.filter((k) => k in fields && fields[k] !== product[k]);
-  if (locked.length) throw new HttpError(409, `This product is synced from Odyssey. Change ${locked.join(', ')} in Odyssey.`);
+  const owned = product.source === 'odyssey' ? SYNCED_FIELDS : product.odyssey_id ? LINKED_FIELDS : [];
+  const locked = owned.filter((k) => k in fields && (fields[k] ?? '') !== (product[k] ?? ''));
+  if (!locked.length) return;
+  const what = product.source === 'odyssey' ? 'This product is synced from Odyssey' : 'This product is linked to Odyssey';
+  throw new HttpError(409, `${what}. Change ${locked.join(', ')} in Odyssey.`);
 }
+
+const PAIR_FIELDS = { product_id: v.id({ label: 'Product' }), other_id: v.id({ label: 'Other product' }) };
+const MERGE_FIELDS = { merge_id: v.id({ label: 'Product to merge' }) };
 
 export function productRoutes({ db, files }) {
   const router = Router();
@@ -44,6 +53,40 @@ export function productRoutes({ db, files }) {
       const lifecycle = Object.hasOwn(LIFECYCLES, req.query.lifecycle ?? '') ? req.query.lifecycle : undefined;
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
       res.json({ products: await listProducts(db, { lifecycle, q }) });
+    }),
+  );
+
+  // Products that look like the same thing: an Aether product and a copy synced from Odyssey.
+  router.get(
+    '/api/products/duplicates',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      res.json({ pairs: await suggestDuplicates(db) });
+    }),
+  );
+
+  router.post(
+    '/api/products/duplicates/dismiss',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const { product_id, other_id } = parse(req.body, PAIR_FIELDS, { required: ['product_id', 'other_id'] });
+      await markDistinct(db, { aId: product_id, bId: other_id, userId: req.user.id });
+      res.json({ ok: true });
+    }),
+  );
+
+  // Fold another product (usually the Odyssey copy) into this one.
+  router.post(
+    '/api/products/:id/merge',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const { merge_id } = parse(req.body, MERGE_FIELDS, { required: ['merge_id'] });
+      const keep = await loadProduct(db, req.params.id);
+      await withTransaction(db, (tx) => mergeProducts(tx, { keepId: keep.id, mergeId: merge_id, userId: req.user.id }));
+      // Everything was moved, so nothing should be orphaned; pruning keeps the rule that deletes are followed by it.
+      const keys = await pruneOrphanAttachments(db);
+      await Promise.all(keys.map((k) => files?.remove(k)));
+      res.json({ product: await getProduct(db, keep.id) });
     }),
   );
 

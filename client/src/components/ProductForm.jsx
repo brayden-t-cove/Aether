@@ -21,6 +21,8 @@ const toForm = (p = {}) => ({
 /** Create or edit a product. onSubmit receives the API payload and may throw. */
 export default function ProductForm({ product, onSubmit, onCancel, submitLabel = 'Save' }) {
   const synced = product?.source === 'odyssey';
+  // An Aether product linked to Odyssey takes its model number and manufacturer from there.
+  const linked = !synced && !!product?.odyssey_id;
   const [form, setForm] = useState(() => toForm(product));
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -48,6 +50,7 @@ export default function ProductForm({ product, onSubmit, onCancel, submitLabel =
     <form className="stack" onSubmit={handleSubmit}>
       <ErrorNote error={error} />
       {synced && <p className="muted small">This product comes from Odyssey: name, model, category, manufacturer and lifecycle are edited there.</p>}
+      {linked && <p className="muted small">This product is linked to Odyssey: its model and manufacturer are edited there.</p>}
       <div className="form-row">
         <label>
           Name
@@ -57,7 +60,7 @@ export default function ProductForm({ product, onSubmit, onCancel, submitLabel =
           <span>
             Model <span className="muted small">(also its Odyssey name)</span>
           </span>
-          <input value={form.model} onChange={set('model')} disabled={synced} placeholder="W4" />
+          <input value={form.model} onChange={set('model')} disabled={synced || linked} placeholder="W4" />
         </label>
         <label>
           SKU
@@ -71,7 +74,7 @@ export default function ProductForm({ product, onSubmit, onCancel, submitLabel =
         </label>
         <label>
           Manufacturer
-          <input value={form.manufacturer} onChange={set('manufacturer')} disabled={synced} />
+          <input value={form.manufacturer} onChange={set('manufacturer')} disabled={synced || linked} />
         </label>
         <label>
           Lifecycle

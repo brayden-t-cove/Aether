@@ -42,6 +42,7 @@ Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hide
 - **Vendors:** manufacturers, cert labs, packaging, translation and logistics partners, with contacts (including WeChat/WhatsApp), linked products, and the certifications a lab runs.
 - **Odyssey sync:** every 15 minutes, and on **Sync now** (Products page or Admin → Integrations), Aether pulls Odyssey's products, test sessions and vendors.
   - Existing Aether products are linked, not duplicated.
+  - **Possible duplicates** (Products page): when sync couldn't link a product because its name or model differs a little ("AB-123" vs "AB123 V2"), Aether pairs the two, says why they look alike, and lets an editor merge them or mark them as not the same. Merging keeps the Aether product's name and data, takes Odyssey's link, model number and manufacturer, moves everything from the copy onto it, and keeps the copy's name as another name for search.
   - Odyssey-only records arrive as synced, with their core fields read-only.
   - Test results show on product and project pages.
   - **Send to Odyssey** adds an Aether product to Odyssey's catalog.

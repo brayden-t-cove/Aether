@@ -43,6 +43,41 @@ test('an Aether product is sent to Odyssey once', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Send to Odyssey' })).toHaveCount(0);
 });
 
+test('a product added by hand and its Odyssey copy are suggested as duplicates and merged', async ({ page }) => {
+  await login(page, 'editor');
+  await nav(page, 'Products');
+  // Odyssey's "Old Sensor" is model OS1; added here with a dash, so sync couldn't link them.
+  await page.getByRole('button', { name: 'Add product' }).click();
+  await field(page, 'Name').fill('Legacy Sensor');
+  await field(page, 'Model').fill('OS-1');
+  await field(page, 'Lifecycle', 'select').selectOption('sunset');
+  await page.getByRole('button', { name: 'Add product' }).click();
+  await expect(page.getByRole('heading', { name: 'Legacy Sensor' })).toBeVisible();
+
+  await nav(page, 'Products');
+  await page.getByRole('link', { name: 'Review possible duplicates' }).click();
+  await expect(page.getByRole('heading', { name: 'Possible duplicates' })).toBeVisible();
+  const pair = page.getByRole('listitem', { name: 'Legacy Sensor and Old Sensor' });
+  await expect(pair.locator('.dup-score')).toContainText('Very likely the same');
+  await expect(pair).toContainText('Same model number: OS-1 and OS1');
+  await pair.getByRole('button', { name: 'Merge into Legacy Sensor' }).click();
+  await expect(page.getByRole('status')).toContainText('Merged into Legacy Sensor.');
+  await expect(pair).toHaveCount(0);
+
+  await page.getByRole('status').getByRole('link', { name: 'Open it' }).click();
+  await expect(page.locator('h1 .odyssey-tag')).toHaveText('In Odyssey');
+  const details = page.locator('dl.details');
+  await expect(details).toContainText('OS1');
+  // Odyssey's name becomes another name; "OS-1" isn't kept, being the same model number as OS1.
+  await expect(details).toContainText('Also known asOld Sensor');
+
+  // The copy is gone, and searching its old name finds the merged product.
+  await page.goto('/products');
+  await expect(page.getByRole('link', { name: 'Old Sensor', exact: true })).toHaveCount(0);
+  await page.getByPlaceholder('Search name, model, SKU or category').fill('old sensor');
+  await expect(page.getByRole('link', { name: 'Legacy Sensor', exact: true })).toBeVisible();
+});
+
 test('vendors: synced ones are read-only; the team adds a lab with a contact and product', async ({ page }) => {
   await login(page, 'editor');
   await nav(page, 'Vendors');

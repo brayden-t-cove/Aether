@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ModulePlaceholder from './pages/ModulePlaceholder.jsx';
 import ProductsPage from './pages/ProductsPage.jsx';
+import ProductDuplicatesPage from './pages/ProductDuplicatesPage.jsx';
 import ProductDetailPage from './pages/ProductDetailPage.jsx';
 import MarketsPage from './pages/MarketsPage.jsx';
 import MarketDetailPage from './pages/MarketDetailPage.jsx';
@@ -60,6 +61,7 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="/products" element={<ProductsPage />} />
+        <Route path="/products/duplicates" element={<ProductDuplicatesPage />} />
         <Route path="/products/:id" element={<ProductDetailPage />} />
         <Route path="/markets" element={<MarketsPage />} />
         <Route path="/markets/:id" element={<MarketDetailPage />} />

@@ -20,10 +20,12 @@ export default function ProductsPage() {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const { data, error, loading, reload } = useLoad(`/api/products${lifecycle ? `?lifecycle=${lifecycle}` : ''}`);
+  const duplicates = useLoad('/api/products/duplicates');
+  const pairCount = duplicates.data?.pairs.length || 0;
 
   const needle = q.trim().toLowerCase();
   const products = (data?.products || []).filter(
-    (p) => !needle || [p.name, p.model, p.sku, p.category, p.manufacturer].some((v) => v?.toLowerCase().includes(needle)),
+    (p) => !needle || [p.name, p.model, p.sku, p.category, p.manufacturer, ...(p.aliases || [])].some((v) => v?.toLowerCase().includes(needle)),
   );
 
   async function create(payload) {
@@ -45,7 +47,19 @@ export default function ProductsPage() {
         )}
       </header>
 
-      <SyncStatus onSynced={reload} />
+      <SyncStatus
+        onSynced={() => {
+          reload();
+          duplicates.reload();
+        }}
+      />
+
+      {pairCount > 0 && (
+        <p className="alert duplicates-note">
+          {pairCount === 1 ? '1 pair of products looks' : `${pairCount} pairs of products look`} like the same thing, one added here and one synced from
+          Odyssey. <Link to="/products/duplicates">Review possible duplicates</Link>
+        </p>
+      )}
 
       {adding && (
         <div className="card">

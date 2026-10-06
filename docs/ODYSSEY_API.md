@@ -61,7 +61,8 @@ Generate the key with `node -e "console.log(require('crypto').randomBytes(32).to
 ## How records are matched
 
 - **Products:** an Odyssey entry matches an Aether product with the same Odyssey ID; otherwise one whose model equals the Odyssey name, model number (with or without version) or marketed name; otherwise one with the same name.
-  - A match is **linked**: Aether stores the Odyssey ID and keeps all its own data.
+  - A match is **linked**: Aether stores the Odyssey ID and keeps its own name, lifecycle, category and everything else. Its model number and manufacturer follow Odyssey (when Odyssey has them) and are edited there.
+  - Near misses are suggested on **Products → Review possible duplicates**, scored on model numbers (ignoring case, spaces and punctuation, with a version written in the name, or one model inside the other), names, and manufacturer. A different version (V1 vs V2) counts against a pair. Nothing merges without an editor confirming.
   - Entries with no match are added as **synced** products. Their name, model, manufacturer, category and lifecycle follow Odyssey and can't be edited in Aether. Markets, channels, notes and everything else can.
   - Odyssey status maps to lifecycle: `active` → Active; `eol`, `discontinued`, `rejected` → Discontinued; anything else → In development.
 - **Vendors:** matched by Odyssey ID, then by name. Aether's own vendors keep their data when linked. Vendors that exist only in Odyssey are added as synced, contacts included.
