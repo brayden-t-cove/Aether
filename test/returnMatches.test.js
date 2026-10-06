@@ -51,7 +51,7 @@ describe('reading the customer-match workbook', () => {
         sheet: 'Return Matches',
         data: [
           ['Return Order ID', 'Match Confidence'],
-          [4100000000000000001, 'High'],
+          [Number('4100000000000000001'), 'High'],
           ['4100000000000000002', 'Medium'],
           [12345, 'Low'],
         ],
