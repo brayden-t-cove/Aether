@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ITEM_CATEGORIES, STATE_LABELS, STATES } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { formatDate, isOverdue } from '../lib/format.js';
 import ErrorNote from './ErrorNote.jsx';
 import StateBadge from './StateBadge.jsx';
+import ItemUpdates, { LatestUpdate, StateChangeNote } from './ItemUpdates.jsx';
 
 const toForm = (item) => ({
   title: item.title,
@@ -28,11 +29,20 @@ function BlockerLink({ blocker, projectId }) {
 
 /** One checklist row. Expands into an editor for editors. `onChange` reloads the project. */
 export default function ChecklistItem({ item, projectId, allItems, users, stages = [], editable, onChange }) {
-  const [open, setOpen] = useState(false);
+  // ?item=<id> (from the dashboard) opens this item and scrolls to it.
+  const [params] = useSearchParams();
+  const focused = params.get('item') === item.id;
+  const [open, setOpen] = useState(focused);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: 'start' });
+  }, [focused]);
   const [form, setForm] = useState(() => toForm(item));
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [blockerId, setBlockerId] = useState('');
+  // A state picked in the dropdown, waiting for its note (the "why") before it's saved.
+  const [pending, setPending] = useState(null);
 
   const openBlockers = item.blocked_by.filter((b) => b.state !== 'done');
   const overdue = isOverdue(item);
@@ -50,7 +60,11 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
     }
   }
 
-  const setState = (state) => run(() => api(`/api/items/${item.id}`, { method: 'PATCH', body: { state } }));
+  const setState = (state, comment) =>
+    run(async () => {
+      await api(`/api/items/${item.id}`, { method: 'PATCH', body: { state, comment } });
+      setPending(null);
+    });
   const save = (e) => {
     e.preventDefault();
     run(async () => {
@@ -73,15 +87,15 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
   const candidates = allItems.filter((i) => i.id !== item.id && !item.blocked_by.some((b) => b.id === i.id));
 
   return (
-    <li className={`item ${item.state === 'done' ? 'is-done' : ''} ${open ? 'is-open' : ''}`}>
+    <li ref={ref} id={`item-${item.id}`} className={`item ${item.state === 'done' ? 'is-done' : ''} ${open ? 'is-open' : ''}`}>
       <div className="item-row">
         <div className="item-state">
           {editable ? (
             <select
               aria-label={`State of ${item.title}`}
-              value={item.state}
+              value={pending ?? item.state}
               disabled={busy}
-              onChange={(e) => setState(e.target.value)}
+              onChange={(e) => setPending(e.target.value === item.state ? null : e.target.value)}
               className={`state-select state-${item.waiting && item.state !== 'blocked' && item.state !== 'done' ? 'waiting' : item.state}`}
             >
               {STATES.map((s) => (
@@ -108,6 +122,9 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
         </div>
       </div>
 
+      {pending && <StateChangeNote key={pending} item={item} to={pending} busy={busy} onSave={(note) => setState(pending, note)} onCancel={() => setPending(null)} />}
+      {!open && !pending && <LatestUpdate item={item} onOpen={() => setOpen(true)} />}
+
       {openBlockers.length > 0 && item.state !== 'done' && (
         <div className="item-waiting">
           <span className="muted small">Waiting on</span>
@@ -126,8 +143,10 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
       {open && (
         <div className="item-detail">
           <ErrorNote error={error} />
+          <ItemUpdates item={item} editable={editable} onPosted={onChange} />
           {editable ? (
-            <form className="stack" onSubmit={save}>
+            <form className="stack" onSubmit={save} aria-label={`Details of ${item.title}`}>
+              <h3>Details</h3>
               <label>
                 Title
                 <input required value={form.title} onChange={set('title')} />

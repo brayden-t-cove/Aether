@@ -12,7 +12,9 @@ export async function buildDigest(db, notifier) {
   const [overdue, blocked, certs, review, dueSoon] = await Promise.all([
     db.query(`SELECT i.title, i.due_date::text, p.id AS project_id, p.name AS project FROM checklist_items i JOIN projects p ON p.id = i.project_id
                WHERE p.state <> 'done' AND i.state <> 'done' AND i.due_date < current_date ORDER BY i.due_date LIMIT 8`),
-    db.query(`SELECT i.title, p.id AS project_id, p.name AS project FROM checklist_items i JOIN projects p ON p.id = i.project_id
+    db.query(`SELECT i.title, p.id AS project_id, p.name AS project,
+                     (SELECT c.body FROM item_comments c WHERE c.item_id = i.id ORDER BY c.created_at DESC LIMIT 1) AS latest
+                FROM checklist_items i JOIN projects p ON p.id = i.project_id
                WHERE p.state <> 'done' AND ${BLOCKED_SQL('i')} ORDER BY p.name LIMIT 8`),
     db.query(`SELECT c.id, c.mark, c.expiry_date::text, pr.name AS product, m.code FROM certifications c
                 JOIN products pr ON pr.id = c.product_id JOIN markets m ON m.id = c.market_id
@@ -27,7 +29,7 @@ export async function buildDigest(db, notifier) {
   const section = (title, rows, fmt) => (rows.length ? `*${title}*\n${rows.map((r) => `• ${fmt(r)}`).join('\n')}` : null);
   const parts = [
     section(`Overdue (${overdue.rows.length})`, overdue.rows, (r) => `${n.link(`/projects/${r.project_id}`, r.title)} — ${n.esc(r.project)}, due ${r.due_date}`),
-    section(`Blocked (${blocked.rows.length})`, blocked.rows, (r) => `${n.link(`/projects/${r.project_id}`, r.title)} — ${n.esc(r.project)}`),
+    section(`Blocked (${blocked.rows.length})`, blocked.rows, (r) => `${n.link(`/projects/${r.project_id}`, r.title)} — ${n.esc(r.project)}${r.latest ? `: _${n.esc(r.latest.length > 120 ? `${r.latest.slice(0, 120)}…` : r.latest)}_` : ''}`),
     section('Certifications expiring within 30 days', certs.rows, (r) => `${n.link(`/certifications/${r.id}`, `${r.mark} · ${r.product} (${r.code})`)} — ${r.expiry_date}`),
     section('Waiting for review', review.rows, (r) => `${n.link(`/manuals/${r.id}`, `${r.title} ${r.version}`)} — ${n.esc(r.product)}`),
   ].filter(Boolean);

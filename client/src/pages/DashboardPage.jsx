@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
-import { formatDate } from '../lib/format.js';
+import { formatDate, timeAgo } from '../lib/format.js';
 import ActivityList from '../components/ActivityList.jsx';
 import ErrorNote from '../components/ErrorNote.jsx';
 import ProjectTable from '../components/ProjectTable.jsx';
@@ -28,13 +28,21 @@ function ItemList({ items, empty, showDue = true, showImpact = false }) {
         <li key={i.id}>
           <div className="dash-item-main">
             <StateBadge state={i.state} waiting={i.waiting_on?.length > 0} />
-            <Link to={`/projects/${i.project_id}`}>{i.title}</Link>
+            <Link to={`/projects/${i.project_id}?item=${i.id}`}>{i.title}</Link>
           </div>
           <div className="muted small">
             {i.project_name}
             {i.owner_name ? ` · ${i.owner_name}` : ' · Unassigned'}
             {showDue && i.due_date && ` · due ${formatDate(i.due_date)}`}
           </div>
+          {i.latest_comment && (
+            <div className="small dash-latest">
+              “{i.latest_comment.body.length > 160 ? `${i.latest_comment.body.slice(0, 160)}…` : i.latest_comment.body}”{' '}
+              <span className="muted">
+                — {i.latest_comment.author_name || 'Someone'}, {timeAgo(i.latest_comment.created_at)}
+              </span>
+            </div>
+          )}
           {showImpact && i.holds_up > 0 && (
             <div className="small">
               Holds up {i.holds_up} other {i.holds_up === 1 ? 'item' : 'items'}

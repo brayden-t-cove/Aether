@@ -1,5 +1,6 @@
 import { PROJECT_TYPES, STATES } from '../../shared/workflow.js';
 import { updateRow } from './db.js';
+import { LATEST_COMMENT_SQL } from './comments.js';
 import { v } from './validate.js';
 
 export const PROJECT_FIELDS = {
@@ -83,7 +84,7 @@ export async function getProject(db, id) {
 /** Items of one project, each with the items it waits on and the items waiting on it. */
 export async function listProjectItems(db, projectId) {
   const { rows: items } = await db.query(
-    `SELECT i.*, u.name AS owner_name
+    `SELECT i.*, u.name AS owner_name, ${LATEST_COMMENT_SQL('i')}
        FROM checklist_items i
        LEFT JOIN users u ON u.id = i.owner_id
       WHERE i.project_id = $1

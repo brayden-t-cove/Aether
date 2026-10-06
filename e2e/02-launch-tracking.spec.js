@@ -65,15 +65,24 @@ test("an item can't be done while it waits on something open; blocking one posts
 
   const state = (title) => page.locator(`select[aria-label^="State of ${title}"]`);
   const row = (title) => page.locator('li.item').filter({ has: state(title) });
+  // Picking a state asks why; the note is optional.
+  const setState = async (title, value, label, note) => {
+    await state(title).selectOption(value);
+    const form = row(title).locator('form.state-note');
+    if (note) await form.getByLabel('Why the state changed').fill(note);
+    await form.getByRole('button', { name: `Mark ${label}` }).click();
+  };
 
-  await state('Full technical specs defined').selectOption('done');
+  await setState('Full technical specs defined', 'done', 'Done');
   await expect(row('Full technical specs defined').locator('.alert.error')).toContainText("Can't mark as done while waiting on: Discussion on specs and pricing");
+  await row('Full technical specs defined').getByRole('button', { name: 'Cancel' }).click();
+  await expect(state('Full technical specs defined')).toHaveValue('not_started');
 
-  await state('Comparative analysis').selectOption('done');
+  await setState('Comparative analysis', 'done', 'Done');
   await expect(state('Comparative analysis')).toHaveValue('done');
-  await state('Functionality testing').selectOption('done');
-  await state('Discussion on specs and pricing').selectOption('done');
-  await state('Full technical specs defined').selectOption('done');
+  await setState('Functionality testing', 'done', 'Done');
+  await setState('Discussion on specs and pricing', 'done', 'Done');
+  await setState('Full technical specs defined', 'done', 'Done');
   await expect(state('Full technical specs defined')).toHaveValue('done');
 
   // Edit an item: owner, due date in the past (overdue), notes.
@@ -87,10 +96,30 @@ test("an item can't be done while it waits on something open; blocking one posts
 
   const before = (await slackMessages(request)).length;
   await state('Integration discussion').selectOption('blocked');
+  await expect(row('Integration discussion').getByLabel('Why the state changed')).toHaveAttribute('placeholder', /What's blocking it/);
+  await setState('Integration discussion', 'blocked', 'Blocked', 'Waiting on the app team for the API spec');
   await expect(state('Integration discussion')).toHaveValue('blocked');
   await expect.poll(async () => (await slackMessages(request)).length).toBe(before + 1);
   const msg = (await slackMessages(request)).at(-1);
-  expect(msg).toMatch(/^\[staging\] 🚧 <http:\/\/localhost:4100\/projects\/.+\|Integration discussion> was marked \*Blocked\*/);
+  expect(msg).toMatch(/^\[staging\] 🚧 <http:\/\/localhost:4100\/projects\/.+\|Integration discussion> was marked \*Blocked\*.*\n> Waiting on the app team for the API spec/s);
+  // The reason shows under the item, and opens into the thread of updates.
+  await expect(row('Integration discussion').locator('.item-latest')).toContainText('“Waiting on the app team for the API spec” — Ella Editor, just now');
+  await row('Integration discussion').locator('.item-latest').click();
+  const updates = page.getByRole('region', { name: 'Updates on Integration discussion' });
+  await expect(updates.locator('.update')).toHaveCount(1);
+  await expect(updates.locator('.update-change')).toContainText('Not started');
+  await expect(updates.locator('.update-change')).toContainText('Blocked');
+  await updates.getByLabel('New update on Integration discussion').fill('Chased them again today; promised by Friday.');
+  await updates.getByRole('button', { name: 'Post update' }).click();
+  await expect(updates.locator('.update')).toHaveCount(2);
+  await expect(updates.locator('.update').last()).toContainText('promised by Friday');
+  await updates.locator('.update').last().getByRole('button', { name: 'Edit' }).click();
+  await updates.getByLabel('Edit update').fill('Chased them again today; promised by Thursday.');
+  await updates.getByRole('button', { name: 'Save' }).click();
+  await expect(updates.locator('.update').last()).toContainText('promised by Thursday');
+  await expect(updates.locator('.update').last()).toContainText('edited');
+  await row('Integration discussion').locator('.item-title').click();
+  await expect(row('Integration discussion').locator('.item-latest')).toContainText('2 updates');
 
   // Add a custom item into a stage.
   await page.getByLabel('New item title').fill('Confirm IR cut filter supplier');
@@ -115,6 +144,12 @@ test('dashboard shows the blocked and overdue items and the activity', async ({ 
   const row = card('Open projects').locator('tr', { hasText: 'E2E Floodlight — US launch' });
   await expect(row).toContainText('New product');
   await expect(row).toContainText('Ella Editor');
+
+  // The latest update says why it's blocked; the link opens that item on the project page.
+  await expect(card('Blocked')).toContainText('“Chased them again today; promised by Thursday.” — Ella Editor');
+  await expect(page.getByText('Ella Editor on "Integration discussion": “Waiting on the app team for the API spec”')).toBeVisible();
+  await card('Blocked').getByRole('link', { name: 'Integration discussion' }).click();
+  await expect(page.getByRole('region', { name: 'Updates on Integration discussion' }).locator('.update')).toHaveCount(2);
 });
 
 test('international launch template fills in the market details', async ({ page }) => {

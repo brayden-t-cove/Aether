@@ -42,6 +42,9 @@ export function describeActivity(a) {
       if (a.action === 'item_removed') return `${who} removed ${label}`;
       if (a.action === 'dependency_added') return `${who} set ${label} to wait on "${c.blocked_by}"`;
       if (a.action === 'dependency_removed') return `${who} removed a blocker from ${label}`;
+      if (a.action === 'comment_added') return `${who} on ${label}: “${c.excerpt}”`;
+      if (a.action === 'comment_edited') return `${who} edited an update on ${label}`;
+      if (a.action === 'comment_deleted') return `${who} deleted an update on ${label}`;
       if (a.action === 'attachment_added') return `${who} attached "${c.label}" to "${c.item}"`;
       if (a.action === 'attachment_removed') return `${who} removed "${c.label}" from "${c.item}"`;
       break;
