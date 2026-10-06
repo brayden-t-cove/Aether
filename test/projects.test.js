@@ -184,7 +184,7 @@ describe.skipIf(!TEST_DATABASE_URL)('products, markets and launch tracking', () 
       const listing = byTitle(items, 'SKU and listings created');
       await editor.agent.patch(`/api/items/${listing.id}`).send({ due_date: '2020-01-01' }).expect(200);
       const logistics = byTitle(items, 'Warehouse locations');
-      await editor.agent.patch(`/api/items/${logistics.id}`).send({ state: 'blocked', notes: 'Waiting on distributor contract' }).expect(200);
+      await editor.agent.patch(`/api/items/${logistics.id}`).send({ state: 'blocked', comment: 'Waiting on distributor contract' }).expect(200);
 
       const { body } = await viewer.agent.get('/api/dashboard').expect(200);
       const summary = body.projects.find((p) => p.id === project.id);

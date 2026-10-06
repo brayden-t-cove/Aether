@@ -11,13 +11,13 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and th
 - **Products** are Luna's catalog, marked Upcoming, Active or Sunset.
 - **Markets** hold each country's plug types, voltage, required marks and languages. US, CA, UK, EU and AU are set up at first.
 - **Projects** tie a product to a market (for a launch) with an owner, a target date and a state.
-- **Checklist items** belong to a project, each with a category, owner, due date, state, evidence link and notes.
+- **Checklist items** belong to a project, each with a category, owner, due date, state, evidence link and a dated thread of updates. The checklist is a list grouped by stage: tick an item off from its row, or click its title to open a side panel with its updates, details and dependencies (`?item=<id>` links straight to it).
 - **Waits on:** an item can wait on other items, even in another project. An item can't be marked Done while something it waits on is still open, and loops are refused.
 - **Blocked vs waiting:** *Blocked* means someone marked the item Blocked (an outside problem). *Waiting* means it is waiting on an earlier step, which is normal. The dashboard counts only Blocked items, and shows how many other items each one holds up.
 - **Starting checklists** (`server/lib/templates.js`) come from the team's launch checklists and are organised in stages. *US launch (new product)* runs from validating the product through samples, manual and packaging, listings, launch and post launch. *International launch* takes an existing product into a new country and fills in that market's marks, plug, voltage and languages. Items already wait on the steps they depend on.
 - **Stages:** items can belong to a stage, and the project page lists them stage by stage. Items without stages are grouped by category.
 - **States** are shared by projects and items: Not started, In progress, Blocked, In review, Done.
-- **Updates:** each item has a dated thread of updates saying where it stands and why. Changing an item's state asks why (optional; for Blocked it asks what's blocking it), and the note is saved with the change, so the thread reads "In progress → Blocked: lab booked until November". The latest update shows under the item on the checklist and on the dashboard; a Blocked note goes into the Slack post and the daily digest. Writers can edit or delete their own updates; admins can delete any.
+- **Updates:** each item has a dated thread of updates saying where it stands and why. Changing an item's state asks why (optional; for Blocked it asks what's blocking it), and the note is saved with the change, so the thread reads "In progress → Blocked: lab booked until November". The latest update shows under the item on the checklist and on the dashboard; a Blocked note goes into the Slack post and the daily digest. Writers can edit or delete their own updates; admins can delete any. There is no single notes field: notes in an imported checklist become each item's first update. Click an item's title (with the arrow) to open its updates and details.
 
 ## Certifications, manuals and design work (Phase 2)
 

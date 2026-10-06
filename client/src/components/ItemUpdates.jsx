@@ -59,7 +59,7 @@ export function LatestUpdate({ item, onOpen }) {
   const c = item.latest_comment;
   if (!c) return null;
   return (
-    <button className="item-latest" onClick={onOpen} title="Show all updates">
+    <button className={`item-latest ${item.state === 'blocked' ? 'is-note' : ''}`} onClick={onOpen} title="Show all updates">
       <span className="item-latest-body">“{c.body}”</span>
       <span className="muted">
         {' '}

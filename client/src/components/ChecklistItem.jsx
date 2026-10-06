@@ -1,49 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { ITEM_CATEGORIES, STATE_LABELS, STATES } from '../../../shared/workflow.js';
+import { STATE_LABELS, STATES } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { formatDate, isOverdue } from '../lib/format.js';
 import ErrorNote from './ErrorNote.jsx';
 import StateBadge from './StateBadge.jsx';
-import ItemUpdates, { LatestUpdate, StateChangeNote } from './ItemUpdates.jsx';
+import { BlockerLink } from './ItemPanel.jsx';
+import { LatestUpdate, StateChangeNote } from './ItemUpdates.jsx';
 
-const toForm = (item) => ({
-  title: item.title,
-  stage: item.stage || '',
-  category: item.category,
-  owner_id: item.owner_id || '',
-  due_date: item.due_date || '',
-  evidence_url: item.evidence_url || '',
-  notes: item.notes || '',
-});
+const initials = (name) =>
+  (name || '?')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
 
-function BlockerLink({ blocker, projectId }) {
-  const sameProject = blocker.project_id === projectId;
+/** A person's initials in a colored circle; the color stays the same for the same name. */
+export function Avatar({ name }) {
+  let h = 0;
+  for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) % 6;
   return (
-    <span className={`chip-static ${blocker.state === 'done' ? 'done' : ''}`}>
-      {sameProject ? blocker.title : <Link to={`/projects/${blocker.project_id}`}>{`${blocker.project_name}: ${blocker.title}`}</Link>}
-      {blocker.state === 'done' && ' ✓'}
+    <span className={`avatar-sm tone-${h}`} aria-hidden="true">
+      {initials(name)}
     </span>
   );
 }
 
-/** One checklist row. Expands into an editor for editors. `onChange` reloads the project. */
-export default function ChecklistItem({ item, projectId, allItems, users, stages = [], editable, onChange }) {
-  // ?item=<id> (from the dashboard) opens this item and scrolls to it.
-  const [params] = useSearchParams();
-  const focused = params.get('item') === item.id;
-  const [open, setOpen] = useState(focused);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (focused) ref.current?.scrollIntoView({ block: 'start' });
-  }, [focused]);
-  const [form, setForm] = useState(() => toForm(item));
+/**
+ * One checklist row: tick, title, owner, due date, state and update count. Clicking the title opens the item's
+ * panel (`onSelect`); `onChange` reloads the project.
+ */
+export default function ChecklistItem({ item, projectId, editable, selected, onSelect, onChange }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [blockerId, setBlockerId] = useState('');
   // A state picked in the dropdown, waiting for its note (the "why") before it's saved.
   const [pending, setPending] = useState(null);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
 
+  const done = item.state === 'done';
   const openBlockers = item.blocked_by.filter((b) => b.state !== 'done');
   const overdue = isOverdue(item);
 
@@ -59,37 +56,48 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
       setBusy(false);
     }
   }
-
   const setState = (state, comment) =>
     run(async () => {
       await api(`/api/items/${item.id}`, { method: 'PATCH', body: { state, comment } });
       setPending(null);
     });
-  const save = (e) => {
-    e.preventDefault();
-    run(async () => {
-      await api(`/api/items/${item.id}`, { method: 'PATCH', body: { ...form, owner_id: form.owner_id || null } });
-      setOpen(false);
-    });
-  };
-  const addBlocker = () =>
-    blockerId &&
-    run(async () => {
-      await api(`/api/items/${item.id}/dependencies`, { method: 'POST', body: { blocked_by_id: blockerId } });
-      setBlockerId('');
-    });
-  const removeBlocker = (id) => run(() => api(`/api/items/${item.id}/dependencies/${id}`, { method: 'DELETE' }));
-  const remove = () => {
-    if (window.confirm(`Remove "${item.title}"?`)) run(() => api(`/api/items/${item.id}`, { method: 'DELETE' }));
-  };
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
-
-  const candidates = allItems.filter((i) => i.id !== item.id && !item.blocked_by.some((b) => b.id === i.id));
+  // The tick is the quick way: done, or back to in progress.
+  const tick = () => setState(done ? 'in_progress' : 'done');
 
   return (
-    <li ref={ref} id={`item-${item.id}`} className={`item ${item.state === 'done' ? 'is-done' : ''} ${open ? 'is-open' : ''}`}>
+    <li ref={ref} id={`item-${item.id}`} className={`item ${done ? 'is-done' : ''} ${selected ? 'is-selected' : ''} state-row-${item.state}`}>
       <div className="item-row">
-        <div className="item-state">
+        {editable ? (
+          <button className={`tick ${done ? 'on' : ''}`} onClick={tick} disabled={busy} aria-pressed={done} aria-label={done ? `Reopen: ${item.title}` : `Tick off: ${item.title}`}>
+            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+              <path d="M2.5 6.2 5 8.6 9.6 3.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        ) : (
+          <span className={`tick static ${done ? 'on' : ''}`} aria-hidden="true">
+            <svg viewBox="0 0 12 12" width="12" height="12">
+              <path d="M2.5 6.2 5 8.6 9.6 3.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        )}
+        <button className="item-title" onClick={() => onSelect(selected ? null : item.id)} aria-expanded={selected} title={selected ? 'Close details' : 'Show details and updates'}>
+          <span className="item-title-text">{item.title}</span>
+          <svg className="chevron" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <span className="item-owner">
+          {item.owner_name ? (
+            <>
+              <Avatar name={item.owner_name} />
+              <span className="item-owner-name">{item.owner_name}</span>
+            </>
+          ) : (
+            <span className="muted">Unassigned</span>
+          )}
+        </span>
+        <span className={`item-due ${overdue ? 'overdue-text' : 'muted'}`}>{item.due_date ? `${overdue ? 'Overdue · ' : ''}${formatDate(item.due_date)}` : ''}</span>
+        <span className="item-state">
           {editable ? (
             <select
               aria-label={`State of ${item.title}`}
@@ -107,164 +115,37 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
           ) : (
             <StateBadge state={item.state} waiting={item.waiting} />
           )}
-        </div>
-        <button className="item-title" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          {item.title}
-        </button>
-        <div className="item-meta">
-          <span className={item.owner_name ? '' : 'muted'}>{item.owner_name || 'Unassigned'}</span>
-          {item.due_date && <span className={overdue ? 'overdue-text' : 'muted'}>{overdue ? 'Overdue · ' : 'Due '}{formatDate(item.due_date)}</span>}
-          {item.evidence_url && (
-            <a href={item.evidence_url} target="_blank" rel="noreferrer noopener">
-              Evidence
-            </a>
+        </span>
+        <span className="item-count" title={`${item.comment_count} ${item.comment_count === 1 ? 'update' : 'updates'}`}>
+          {item.comment_count > 0 && (
+            <>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <path d="M2.5 3.5h11v7H6l-3.5 3v-3z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              </svg>
+              <span className="visually-hidden">Updates: </span>
+              {item.comment_count}
+            </>
           )}
-        </div>
+        </span>
       </div>
 
       {pending && <StateChangeNote key={pending} item={item} to={pending} busy={busy} onSave={(note) => setState(pending, note)} onCancel={() => setPending(null)} />}
-      {!open && !pending && <LatestUpdate item={item} onOpen={() => setOpen(true)} />}
+      {!pending && <LatestUpdate item={item} onOpen={() => onSelect(item.id)} />}
 
-      {openBlockers.length > 0 && item.state !== 'done' && (
+      {openBlockers.length > 0 && !done && (
         <div className="item-waiting">
           <span className="muted small">Waiting on</span>
           {openBlockers.slice(0, 2).map((b) => (
             <BlockerLink key={b.id} blocker={b} projectId={projectId} />
           ))}
           {openBlockers.length > 2 && (
-            <button className="link-btn small" onClick={() => setOpen(true)}>
+            <button className="link-btn small" onClick={() => onSelect(item.id)}>
               +{openBlockers.length - 2} more
             </button>
           )}
         </div>
       )}
-      <ErrorNote error={!open && error} />
-
-      {open && (
-        <div className="item-detail">
-          <ErrorNote error={error} />
-          <ItemUpdates item={item} editable={editable} onPosted={onChange} />
-          {editable ? (
-            <form className="stack" onSubmit={save} aria-label={`Details of ${item.title}`}>
-              <h3>Details</h3>
-              <label>
-                Title
-                <input required value={form.title} onChange={set('title')} />
-              </label>
-              <div className="form-row">
-                <label>
-                  Stage
-                  <input list={`stages-${item.id}`} value={form.stage} onChange={set('stage')} placeholder="No stage" />
-                  <datalist id={`stages-${item.id}`}>
-                    {stages.map((s) => (
-                      <option key={s} value={s} />
-                    ))}
-                  </datalist>
-                </label>
-                <label>
-                  Category
-                  <select value={form.category} onChange={set('category')}>
-                    {Object.entries(ITEM_CATEGORIES).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Owner
-                  <select value={form.owner_id} onChange={set('owner_id')}>
-                    <option value="">Unassigned</option>
-                    {users.filter((u) => u.active || u.id === item.owner_id).map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name || u.email}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Due date
-                  <input type="date" value={form.due_date} onChange={set('due_date')} />
-                </label>
-              </div>
-              <label>
-                <span>
-                  Evidence link <span className="muted small">(certificate, test report, file in Drive…)</span>
-                </span>
-                <input type="url" value={form.evidence_url} onChange={set('evidence_url')} placeholder="https://" />
-              </label>
-              <label>
-                Notes
-                <textarea rows={3} value={form.notes} onChange={set('notes')} />
-              </label>
-              <div className="row">
-                <button className="btn primary" disabled={busy}>
-                  Save
-                </button>
-                <button type="button" className="btn ghost" onClick={() => setOpen(false)}>
-                  Close
-                </button>
-                <span className="spacer" />
-                <button type="button" className="btn ghost danger small" onClick={remove} disabled={busy}>
-                  Remove item
-                </button>
-              </div>
-            </form>
-          ) : (
-            item.notes && <p className="pre">{item.notes}</p>
-          )}
-
-          <div className="deps">
-            <div>
-              <h3>Waits on</h3>
-              {item.blocked_by.length === 0 && <p className="muted small">Nothing. This item can be done any time.</p>}
-              <ul className="dep-list">
-                {item.blocked_by.map((b) => (
-                  <li key={b.id}>
-                    <StateBadge state={b.state} />
-                    <BlockerLink blocker={b} projectId={projectId} />
-                    {editable && (
-                      <button className="btn ghost small" onClick={() => removeBlocker(b.id)} disabled={busy} aria-label={`Stop waiting on ${b.title}`}>
-                        Remove
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {editable && candidates.length > 0 && (
-                <div className="row">
-                  <select value={blockerId} onChange={(e) => setBlockerId(e.target.value)} aria-label="Add something this item waits on">
-                    <option value="">Add an item this waits on…</option>
-                    {candidates.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.title}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="btn small" onClick={addBlocker} disabled={!blockerId || busy}>
-                    Add
-                  </button>
-                </div>
-              )}
-            </div>
-            <div>
-              <h3>Holds up</h3>
-              {item.blocks.length === 0 ? (
-                <p className="muted small">Nothing waits on this item.</p>
-              ) : (
-                <ul className="dep-list">
-                  {item.blocks.map((b) => (
-                    <li key={b.id}>
-                      <StateBadge state={b.state} />
-                      <BlockerLink blocker={b} projectId={projectId} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ErrorNote error={error} />
     </li>
   );
 }

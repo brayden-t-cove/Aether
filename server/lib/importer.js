@@ -13,6 +13,7 @@ import { logActivity } from './activity.js';
 import { createProduct, setProductMarkets, updateProduct } from './products.js';
 import { createProject } from './projects.js';
 import { createItem } from './items.js';
+import { addComment } from './comments.js';
 
 export const MAX_ROWS = 1000;
 
@@ -371,8 +372,10 @@ export async function runImport(tx, plan, userId) {
 
     const idByTitle = new Map();
     for (const [position, item] of pr.items.entries()) {
-      const { waitsOn: _w, ...fields } = item;
+      const { waitsOn: _w, notes, ...fields } = item;
       const created = await createItem(tx, project.id, { ...fields, position }, userId);
+      // A note in the file becomes the item's first update.
+      if (notes) await addComment(tx, { item: created, body: notes.slice(0, 5000), userId });
       idByTitle.set(item.title.toLowerCase(), created.id);
     }
     for (const item of pr.items) {

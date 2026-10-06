@@ -32,7 +32,7 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 5: notifications, digest, integration
   it('posts to Slack when work is blocked, certified, ready for review, delivered or imported', async () => {
     const { body: p } = await editor.agent.post('/api/projects').send({ name: 'Doorbell V2 — US launch', product_id: product.id }).expect(201);
     const { body: item } = await editor.agent.post(`/api/projects/${p.project.id}/items`).send({ title: 'MP samples from the factory' }).expect(201);
-    await editor.agent.patch(`/api/items/${item.item.id}`).send({ state: 'blocked', notes: 'No reply since Tuesday' }).expect(200);
+    await editor.agent.patch(`/api/items/${item.item.id}`).send({ state: 'blocked', comment: 'No reply since Tuesday' }).expect(200);
 
     const { body: cert } = await editor.agent.post('/api/certifications').send({ product_id: product.id, market_id: market.id, mark: 'FCC' }).expect(201);
     await editor.agent.patch(`/api/certifications/${cert.certification.id}`).send({ state: 'certified' }).expect(200);

@@ -21,7 +21,7 @@ const PROJECTS = [
     state: 'in_progress',
     target_date: '2026-11-06',
     items: [
-      { title: 'Samples received', category: 'testing', state: 'in_progress', due_date: '2026-10-02', owner: 'nobody@lunahome.com' },
+      { title: 'Samples received', category: 'testing', state: 'in_progress', due_date: '2026-10-02', owner: 'nobody@lunahome.com', notes: 'Factory shipped them Monday' },
       { title: 'Regression test', category: 'testing', state: 'done', waits_on: ['Samples received'] },
       { title: 'Manual', category: 'manual', waits_on: ['Regression test', 'Not a real item'] },
     ],
@@ -86,7 +86,9 @@ describe.skipIf(!TEST_DATABASE_URL)('import', () => {
     const { body: page } = await admin.agent.get(`/api/projects/${projectId}`).expect(200);
     expect(page.project).toMatchObject({ product_id: v2.id, market_code: 'US', owner_name: 'Admin', target_date: '2026-11-06', state: 'in_progress' });
     const items = Object.fromEntries(page.items.map((i) => [i.title, i]));
-    expect(items['Samples received']).toMatchObject({ owner_id: null, due_date: '2026-10-02' });
+    expect(items['Samples received']).toMatchObject({ owner_id: null, due_date: '2026-10-02', comment_count: 1 });
+    // A note in the file becomes the item's first update.
+    expect(items['Samples received'].latest_comment).toMatchObject({ body: 'Factory shipped them Monday', author_name: 'Admin' });
     expect(items['Regression test']).toMatchObject({ state: 'in_review', waiting: true });
     expect(items.Manual.blocked_by.map((b) => b.title)).toEqual(['Regression test']);
     expect(page.activity[0]).toMatchObject({ action: 'created', changes: { imported: true, items: 3 } });
