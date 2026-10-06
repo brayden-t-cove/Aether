@@ -12,7 +12,7 @@ const ONLINE = `COALESCE((SELECT CASE WHEN m.confidence IN ('high', 'medium') TH
                                      WHEN m.unmatched_reason = 'no_activation' THEN 'never' END
                             FROM return_matches m WHERE m.channel = r.channel AND m.return_ref = r.return_ref), 'unknown')`;
 
-function filters({ from, to, channel, productId, marketId, flag, match, blank }, extra = []) {
+function filters({ from, to, channel, productId, marketId, flag, match, blank, bucket, noted }, extra = []) {
   const where = [...extra];
   const params = [];
   const add = (sql, value) => {
@@ -26,6 +26,10 @@ function filters({ from, to, channel, productId, marketId, flag, match, blank },
   if (marketId) add('r.market_id = ?', marketId);
   if (flag) add('EXISTS (SELECT 1 FROM return_flags f WHERE f.return_id = r.id AND f.flag = ? AND f.active)', flag);
   if (match === 'strong') where.push(`NOT ${WEAK_MATCH}`);
+  // A bucket: its category, where Other also takes notes nobody has filed yet.
+  if (bucket === 'non_specific') where.push("(r.category_id IS NULL AND r.note_clean <> '' OR EXISTS (SELECT 1 FROM return_categories bc WHERE bc.id = r.category_id AND bc.key = 'non_specific'))");
+  else if (bucket) add('EXISTS (SELECT 1 FROM return_categories bc WHERE bc.id = r.category_id AND bc.key = ?)', bucket);
+  if (noted) where.push("r.note_clean <> ''");
   // No buyer note. Set-aside returns are left out, as everywhere the dashboard counts returns.
   if (blank) where.push("r.note_clean = '' AND NOT EXISTS (SELECT 1 FROM return_categories sa WHERE sa.id = r.category_id AND sa.set_aside)");
   return { where: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
@@ -49,7 +53,12 @@ export async function returnsSummary(db, opts = {}) {
   const units = (cond) => `COALESCE(sum(r.quantity) FILTER (WHERE ${cond}), 0)::int`;
   const cause = (key) => units(`c.in_share AND ${CAUSE} = '${key}'`);
   const all = filters(opts);
-  const [totals, allTotals, setAside, byMonth, byCategory, topReasons, byProduct] = await Promise.all([
+  // The monthly trend can start earlier than the period, so a month's page still shows the months before it.
+  const trend = opts.trendFrom ? filters({ ...opts, from: opts.trendFrom }, ['NOT COALESCE(c.set_aside, false)']) : { where, params };
+  // A bucket for every return the buyer explained: its category, or Other while a person hasn't filed it yet.
+  const BUCKET = "COALESCE(c.key, 'non_specific')";
+  const IN_BUCKET = '(c.in_share OR r.category_id IS NULL)';
+  const [totals, allTotals, setAside, byMonth, byCategory, topReasons, byProduct, bySubreason, reasonVsBucket, productBuckets] = await Promise.all([
     q(`SELECT COALESCE(sum(r.quantity), 0)::int AS units, count(*)::int AS lines,
               count(DISTINCT r.product_id)::int AS products,
               ${units('c.in_share')} AS share_units,
@@ -57,7 +66,11 @@ export async function returnsSummary(db, opts = {}) {
               ${cause('unclear')} AS unclear_units, ${cause('other')} AS other_cause_units,
               ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'online'`)} AS unclear_online_units,
               ${units(`c.in_share AND ${CAUSE} = 'unclear' AND ${ONLINE} = 'never'`)} AS unclear_never_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND r.channel <> 'tiktok'`)} AS unclear_not_tiktok_units,
+              ${units(`c.in_share AND ${CAUSE} = 'unclear' AND r.channel = 'tiktok'
+                        AND NOT EXISTS (SELECT 1 FROM return_matches m WHERE m.channel = r.channel AND m.return_ref = r.return_ref)`)} AS unclear_not_in_workbook_units,
               ${units("c.key = 'no_comment'")} AS no_comment_units,
+              ${units("r.note_clean <> ''")} AS noted_units, ${units("r.note_clean = ''")} AS blank_units,
               ${units('r.category_id IS NULL')} AS unsorted_units,
               min(r.return_date)::text AS first_date, max(r.return_date)::text AS last_date
          ${from} ${where}`),
@@ -66,7 +79,7 @@ export async function returnsSummary(db, opts = {}) {
          ${from} ${all.where} ${all.where ? 'AND' : 'WHERE'} c.set_aside
         GROUP BY c.key, s.key, s.name, c.sort_order, s.sort_order ORDER BY c.sort_order, s.sort_order`, all.params),
     q(`SELECT to_char(date_trunc('month', r.return_date), 'YYYY-MM') AS month, r.channel, sum(r.quantity)::int AS units
-         ${from} ${where} GROUP BY 1, 2 ORDER BY 1, 2`),
+         ${from} ${trend.where} GROUP BY 1, 2 ORDER BY 1, 2`, trend.params),
     q(`SELECT c.key, c.name, sum(r.quantity)::int AS units
          ${from} ${where} AND c.in_share
         GROUP BY c.key, c.name, c.sort_order ORDER BY units DESC, c.sort_order`),
@@ -77,6 +90,7 @@ export async function returnsSummary(db, opts = {}) {
             top AS (SELECT DISTINCT ON (product_id) product_id, category_name FROM per ORDER BY product_id, u DESC, sort_order)
        SELECT f.product_id, COALESCE(p.name, 'Unmatched') AS name, p.model, sum(f.quantity)::int AS units,
               COALESCE(sum(f.quantity) FILTER (WHERE f.in_share), 0)::int AS share_units,
+              COALESCE(sum(f.quantity) FILTER (WHERE f.note_clean <> ''), 0)::int AS noted_units,
               COALESCE(sum(f.quantity) FILTER (WHERE f.in_share AND f.cause = 'fault'), 0)::int AS fault_units,
               COALESCE(sum(f.quantity) FILTER (WHERE f.in_share AND f.cause = 'unclear'), 0)::int AS unclear_units,
               t.category_name AS top_category
@@ -85,8 +99,21 @@ export async function returnsSummary(db, opts = {}) {
          LEFT JOIN top t ON t.product_id IS NOT DISTINCT FROM f.product_id
         GROUP BY f.product_id, p.name, p.model, t.category_name
         ORDER BY units DESC`),
+    q(`SELECT ${BUCKET} AS bucket, s.key, s.name, sum(r.quantity)::int AS units
+         ${from} ${where} AND ${IN_BUCKET} GROUP BY 1, 2, 3, s.sort_order ORDER BY 1, s.sort_order NULLS LAST`),
+    // The reason picked on the platform against the bucket the note was put in, for how far the platform reasons hold up.
+    q(`SELECT COALESCE(NULLIF(r.reason, ''), NULLIF(r.reason_code, ''), 'No reason given') AS reason, ${BUCKET} AS bucket, sum(r.quantity)::int AS units
+         ${from} ${where} AND ${IN_BUCKET} GROUP BY 1, 2 ORDER BY 1, 2`),
+    q(`SELECT r.product_id, ${BUCKET} AS bucket, sum(r.quantity)::int AS units
+         ${from} ${where} AND ${IN_BUCKET} GROUP BY 1, 2`),
   ]);
-  return { totals: { ...totals[0], ...allTotals[0] }, setAside, byMonth, byCategory, topReasons, byProduct };
+  // The latest return of all, so an empty month can point to the last one that has returns.
+  const { rows: [latest] } = await db.query('SELECT max(return_date)::text AS date FROM returns');
+  return {
+    totals: { ...totals[0], ...allTotals[0] },
+    latestReturn: latest.date,
+    setAside, byMonth, byCategory, topReasons, byProduct, bySubreason, reasonVsBucket, productBuckets,
+  };
 }
 
 // Weeks run Monday to Sunday. "Today" is taken in MST (UTC−7, no daylight saving), the team's time zone for days.

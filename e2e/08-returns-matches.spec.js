@@ -30,14 +30,14 @@ test('the customer-match workbook is read in the browser and only IDs and confid
 
 test('the Returns page leaves out weak matches unless asked for all', async ({ page }) => {
   await login(page);
-  await page.goto('/returns?period=all');
+  await page.goto('/returns?month=2026-09');
   const stat = (label) => page.locator('.stat', { hasText: label }).locator('.stat-value');
   await expect(page.getByLabel('Customer match')).toHaveValue('strong');
   await expect(page.getByLabel('Customer match').locator('option:checked')).toHaveText('Hide weak matches');
   await expect(page.getByText('Leaving out TikTok returns the customer-match workbook rated Low')).toBeVisible();
-  await expect(stat('Units returned')).toHaveText('4'); // TT-E2E-1 was rated Low
+  await expect(stat('Units returned')).toHaveText('1'); // September: the W4 return; TT-E2E-1 was rated Low
 
   await page.getByLabel('Customer match').selectOption('all');
-  await expect(stat('Units returned')).toHaveText('5');
+  await expect(stat('Units returned')).toHaveText('2');
   await expect(page).toHaveURL(/match=all/);
 });

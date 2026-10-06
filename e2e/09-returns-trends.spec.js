@@ -2,7 +2,7 @@ import { expect, login, test } from './helpers.js';
 
 test.describe.configure({ mode: 'serial' });
 
-// Builds on the returns imported in 05 (Amazon) and 07 (TikTok TT-E2E-1, filed as Non-specific and rated Low in 08).
+// Builds on the returns imported in 05 (Amazon) and 07 (TikTok TT-E2E-1, filed as Other and rated Low in 08).
 // end= pins the weeks so the specs don't depend on today's date.
 
 test('week over week compares the last two finished weeks by category or cause', async ({ page }) => {
@@ -11,7 +11,7 @@ test('week over week compares the last two finished weeks by category or cause',
   await expect(page.getByRole('tab', { name: 'Week over week' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('Comparing the week of Sep 14–20 with Sep 7–13.')).toBeVisible();
   const table = page.getByRole('table', { name: 'Units by category per week' });
-  await expect(table.locator('tr', { hasText: 'Non-specific' })).toContainText('01+1');
+  await expect(table.locator('tr', { hasText: /^Other/ })).toContainText('01+1');
 
   await page.getByRole('tab', { name: 'Causes' }).click();
   await expect(page.getByRole('table', { name: 'Units by cause per week' }).locator('tr', { hasText: 'Other reasons' })).toContainText('+1');
@@ -33,7 +33,7 @@ test('Amazon vs TikTok puts the channels side by side', async ({ page }) => {
   const glance = page.getByRole('table', { name: 'Amazon and TikTok compared' });
   await expect(glance.locator('tr', { hasText: 'Units returned' })).toContainText('31'); // 3 Amazon, 1 TikTok
   await expect(glance.locator('tr', { hasText: 'Returns with no note' })).toContainText('100%0%');
-  await expect(page.getByRole('table', { name: 'Categories by channel' })).toContainText('Non-specific');
+  await expect(page.getByRole('table', { name: 'Categories by channel' })).toContainText('Other');
 });
 
 test('blank notes counts returns with no note per week and lists the latest', async ({ page }) => {

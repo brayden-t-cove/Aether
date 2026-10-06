@@ -45,7 +45,7 @@ function odysseyKeys(o) {
 const modelTaken = (products, model, exceptId) => products.some((p) => p.id !== exceptId && lower(p.model) === model.toLowerCase());
 
 async function syncProducts(tx, items, stats) {
-  const { rows: existing } = await tx.query('SELECT id, name, model, source, odyssey_id FROM products');
+  const { rows: existing } = await tx.query('SELECT id, name, model, manufacturer, source, odyssey_id FROM products');
   const byOdysseyId = new Map(existing.filter((p) => p.odyssey_id).map((p) => [p.odyssey_id, p]));
   const idMap = new Map(); // Odyssey product ID → Aether product ID
 
@@ -87,7 +87,18 @@ async function syncProducts(tx, items, stats) {
         else await tx.query('UPDATE products SET synced_at = now() WHERE id = $1', [product.id]);
         Object.assign(product, { name: fields.name, model: fields.model });
       } else {
-        await tx.query('UPDATE products SET synced_at = now() WHERE id = $1', [product.id]);
+        // An Aether product linked to Odyssey keeps its own name, lifecycle and category; Odyssey owns the model
+        // number and manufacturer. Empty Odyssey values, and a model another product already has, leave Aether's.
+        const model = fields.model && !modelTaken(existing, fields.model, product.id) ? fields.model : product.model;
+        const manufacturer = fields.manufacturer || product.manufacturer;
+        const { rowCount } = await tx.query(
+          `UPDATE products SET model = $2, manufacturer = $3, synced_at = now(), updated_at = now()
+            WHERE id = $1 AND (COALESCE(model, ''), manufacturer) IS DISTINCT FROM (COALESCE($2, ''), $3)`,
+          [product.id, model, manufacturer],
+        );
+        if (rowCount) stats.products_updated++;
+        else await tx.query('UPDATE products SET synced_at = now() WHERE id = $1', [product.id]);
+        Object.assign(product, { model, manufacturer });
       }
       idMap.set(odysseyId, product.id);
       continue;
@@ -98,7 +109,7 @@ async function syncProducts(tx, items, stats) {
     const { rows } = await tx.query(
       `INSERT INTO products (name, model, manufacturer, category, lifecycle, source, odyssey_id, synced_at)
        VALUES ($1, $2, $3, $4, $5, 'odyssey', $6, now())
-       RETURNING id, name, model, source, odyssey_id`,
+       RETURNING id, name, model, manufacturer, source, odyssey_id`,
       [fields.name, taken ? null : fields.model, fields.manufacturer, fields.category, fields.lifecycle, odysseyId],
     );
     existing.push(rows[0]);

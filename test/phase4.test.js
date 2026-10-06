@@ -71,7 +71,7 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 4: listings, returns, comparisons', (
     it('previews Amazon rows: matches by listing, model and SKU, flags errors, writes nothing', async () => {
       await viewer.agent.post('/api/returns/import').send({ channel: 'amazon', rows: AMAZON, dryRun: true }).expect(403);
       const { body } = await ecom.agent.post('/api/returns/import').send({ channel: 'amazon', market_id: market.US.id, rows: AMAZON, dryRun: true }).expect(200);
-      expect(body.summary).toEqual({ rows: 5, create: 4, units: 5, added: 0, duplicates: 0, errors: 1, unmatched: 1 });
+      expect(body.summary).toEqual({ rows: 5, create: 4, units: 5, added: 0, duplicates: 0, errors: 1, unmatched: 1, with_note: 1 });
       expect(body.rows.find((r) => r.line === 5)).toMatchObject({ action: 'error', error: expect.stringMatching(/date/) });
       expect(body.rows.find((r) => r.line === 6)).toMatchObject({ product_name: 'Window Camera' }); // matched by model W4 in the name
       expect(body.unmatched).toEqual([expect.objectContaining({ external_id: 'B0MYSTERY', units: 1 })]);

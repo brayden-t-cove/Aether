@@ -65,7 +65,7 @@ describe.skipIf(!TEST_DATABASE_URL)('reviewing returns', () => {
     expect(body.activity.find((a) => a.action === 'categorized')).toMatchObject({
       entity_type: 'return',
       entity_id: id,
-      changes: { label: 'Sample Cam', from: null, to: 'Non-specific / Vague ("doesn\'t work", "not as expected")' },
+      changes: { label: 'Sample Cam', from: null, to: 'Other / Vague ("doesn\'t work", "not as expected")' },
     });
   });
 

@@ -22,11 +22,14 @@ export function unmatchedReason(status) {
  * A sheet with a return ID and a confidence column gives that confidence; a sheet with a return ID and
  * "unmatched" in its name (the workbook's "Unmatched Returns" tab) gives "unmatched", with why from its
  * Match Status column ("No activation found for zip", "Order not found…"). Others are skipped.
- * → { matches: [{ return_ref, confidence, unmatched_reason? }], used: [{ sheet, rows }] }
+ * → { matches: [{ return_ref, confidence, unmatched_reason? }], used: [{ sheet, rows }], rounded }
  */
 export function extractMatches(sheets) {
   const matches = [];
   const used = [];
+  // TikTok return IDs are 19 digits. Stored in Excel as a number rather than text, they're rounded (Excel keeps 15
+  // digits), so they can't match any return. Those are skipped and counted, so the upload can say so.
+  let rounded = 0;
   for (const { sheet, data } of sheets) {
     // The header is the first row that names a return ID column (a title row may come before it).
     const headerAt = data.findIndex((row) => row?.some((cell) => ID_HEADERS.includes(norm(cell))));
@@ -40,7 +43,12 @@ export function extractMatches(sheets) {
 
     let rows = 0;
     for (const row of data.slice(headerAt + 1)) {
-      const ref = String(row?.[idCol] ?? '').trim();
+      const cell = row?.[idCol];
+      if (typeof cell === 'number' && !Number.isSafeInteger(cell)) {
+        rounded++;
+        continue;
+      }
+      const ref = String(cell ?? '').trim();
       if (!ref) continue;
       if (confCol >= 0) matches.push({ return_ref: ref, confidence: String(row[confCol] ?? '').trim() });
       else matches.push({ return_ref: ref, confidence: 'unmatched', unmatched_reason: statusCol >= 0 ? unmatchedReason(row[statusCol]) : null });
@@ -48,7 +56,7 @@ export function extractMatches(sheets) {
     }
     used.push({ sheet, rows });
   }
-  return { matches, used };
+  return { matches, used, rounded };
 }
 
 /** Read an .xlsx File. The spreadsheet reader is loaded only when someone uploads a workbook. */

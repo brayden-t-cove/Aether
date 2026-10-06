@@ -29,6 +29,12 @@
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  /* Neutrals for the slices that aren't a bucket: Other, and returns with no comment. */
+  --series-other: #8a9396;
+  --series-blank: #cfd6d7;
   --chart-grid: #e8eaed;
   --chart-axis: #c3c7ce;
   --accent-strong: #0b5354;
@@ -69,6 +75,11 @@
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-other: #7d8a8d;
+    --series-blank: #3f4b4e;
     --chart-grid: #262b33;
     --chart-axis: #3a414c;
     --accent-strong: #63d8cb;
@@ -103,6 +114,11 @@
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-other: #7d8a8d;
+  --series-blank: #3f4b4e;
   --chart-grid: #262b33;
   --chart-axis: #3a414c;
   --accent-strong: #63d8cb;
@@ -1909,6 +1925,277 @@ table.comparison .luna-col {
 }
 
 /* Anyone who has asked their system for less motion gets none. */
+/* Returns overview: month picker, donuts, the bucket key, platform vs notes, product rows that open, notes. */
+.month-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.month-picker select {
+  font-weight: 700;
+}
+.donut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+}
+.donut-figure {
+  flex: 0 0 auto;
+  width: 180px;
+}
+.donut-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.donut-slice {
+  transition: stroke-width 0.15s var(--ease-out);
+  outline: none;
+}
+.donut-gap {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.donut-empty {
+  stroke: var(--surface-2);
+}
+.donut-center {
+  font-size: 1.6rem;
+  font-weight: 800;
+  fill: var(--text);
+}
+.donut-center-label {
+  font-size: 0.75rem;
+  fill: var(--text-muted);
+}
+.donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 14rem;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+}
+.donut-legend li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+}
+.donut-legend li.is-active {
+  background: var(--surface-2);
+}
+.donut-legend-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bucket-key {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.bucket {
+  border-bottom: 1px solid var(--border);
+}
+.bucket-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.65rem 0.25rem;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bucket-head:hover {
+  background: var(--surface-2);
+}
+.bucket-name {
+  font-weight: 700;
+}
+.bucket-value {
+  font-variant-numeric: tabular-nums;
+}
+.bucket-body {
+  padding: 0 0.25rem 1rem 2.6rem;
+  animation: update-in 0.2s var(--ease-out);
+}
+.bucket-definition {
+  display: block;
+  margin-top: 0.15rem;
+  font-weight: 400;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  max-width: 60rem;
+}
+.chevron.is-open {
+  transform: rotate(90deg);
+}
+.bucket-body h4,
+.product-detail h4,
+.note-group h4 {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+.variance-headline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.variance-story {
+  margin: 0;
+}
+
+.product-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+}
+.product-model {
+  margin-left: 1.4rem;
+}
+.product-row.is-open td {
+  background: var(--accent-soft);
+}
+.product-detail td {
+  background: var(--surface-2);
+}
+.product-detail-body {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
+  gap: 1.5rem;
+  padding: 0.5rem 0.25rem;
+  animation: update-in 0.2s var(--ease-out);
+}
+
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.note-item {
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+}
+.note-text {
+  margin: 0 0 0.15rem;
+}
+.note-item .muted {
+  margin: 0;
+}
+.note-unfiled {
+  margin-left: 0.5rem;
+}
+@media (max-width: 800px) {
+  .product-detail-body {
+    grid-template-columns: 1fr;
+  }
+  .donut-figure {
+    width: 150px;
+  }
+}
+
+/* A buyer's note in the import preview: a few lines, the rest on hover. */
+.import-note {
+  max-width: 22rem;
+}
+.import-note span[title] {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Possible duplicate products: two product cards side by side, the kept one first. */
+.duplicates-note {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.dup-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+}
+.dup-pair {
+  display: grid;
+  gap: 0.6rem;
+}
+.dup-score.high {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.dup-reasons {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+}
+.dup-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+.dup-side {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 0.75rem 0.9rem;
+}
+.dup-side p {
+  margin: 0 0 0.35rem;
+}
+.dup-heading {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+.dup-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0 0 0.35rem;
+}
+.dup-facts dt {
+  color: var(--text-muted);
+}
+.dup-facts dd {
+  margin: 0;
+}
+.dup-arrow {
+  align-self: center;
+  font-size: 1.4rem;
+  color: var(--accent);
+}
+@media (max-width: 800px) {
+  .dup-sides {
+    grid-template-columns: 1fr;
+  }
+  .dup-arrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

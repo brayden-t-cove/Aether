@@ -63,7 +63,7 @@ test('a viewer sees everything but no editing controls', async ({ page }) => {
 test('every main page fits a phone screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  const paths = ['/', '/readiness', '/projects', '/products', '/markets', '/certifications', '/manuals', '/design-requests', '/vendors', '/returns?period=all', '/comparisons', '/admin/users', '/admin/import', '/admin/integrations'];
+  const paths = ['/', '/readiness', '/projects', '/products', '/markets', '/certifications', '/manuals', '/design-requests', '/vendors', '/returns?month=2026-09', '/comparisons', '/admin/users', '/admin/import', '/admin/integrations'];
   for (const path of paths) {
     await page.goto(path);
     await expect(page.locator('h1')).toBeVisible();
@@ -86,7 +86,7 @@ test('theme toggle switches to dark and is remembered', async ({ page }) => {
   expect(await bg()).not.toBe(light);
   await page.reload();
   await expect(page.getByRole('button', { name: /Theme/ })).toHaveText('Theme: Dark');
-  await page.goto('/returns?period=all');
+  await page.goto('/returns?month=2026-09');
   await expect(page.getByRole('img', { name: 'Units returned per month by channel' })).toBeVisible();
 });
 

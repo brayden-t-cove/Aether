@@ -144,9 +144,15 @@ export default function ProductDetailPage() {
               {product.source === 'odyssey'
                 ? 'Synced from Odyssey (name, model, manufacturer, category and lifecycle are edited there)'
                 : product.odyssey_id
-                  ? 'Aether, linked to Odyssey'
+                  ? 'Aether, linked to Odyssey (model and manufacturer are edited there)'
                   : 'Aether'}
             </dd>
+            {product.aliases?.length > 0 && (
+              <>
+                <dt>Also known as</dt>
+                <dd>{product.aliases.join(', ')}</dd>
+              </>
+            )}
             {vendors.length > 0 && (
               <>
                 <dt>Vendors</dt>

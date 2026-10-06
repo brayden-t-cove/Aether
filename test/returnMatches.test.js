@@ -45,6 +45,22 @@ describe('reading the customer-match workbook', () => {
     expect(JSON.stringify(matches)).not.toMatch(/Person|000-000/);
   });
 
+  it('skips and counts IDs Excel stored as numbers and rounded', () => {
+    const { matches, rounded } = extractMatches([
+      {
+        sheet: 'Return Matches',
+        data: [
+          ['Return Order ID', 'Match Confidence'],
+          [Number('4100000000000000001'), 'High'],
+          ['4100000000000000002', 'Medium'],
+          [12345, 'Low'],
+        ],
+      },
+    ]);
+    expect(rounded).toBe(1);
+    expect(matches.map((m) => m.return_ref)).toEqual(['4100000000000000002', '12345']);
+  });
+
   it('reads why a return was unmatched', () => {
     expect(unmatchedReason('No activation found for zip')).toBe('no_activation');
     expect(unmatchedReason('Order not found in Shopify export')).toBe('order_not_found');
@@ -169,5 +185,9 @@ describe.skipIf(!TEST_DATABASE_URL)('match confidence on the Returns page', () =
     // Order not found says nothing, so it is hidden like a Low match.
     await editor.post('/api/returns/matches').send({ channel: 'tiktok', matches: [{ return_ref: ref(3), confidence: 'unmatched', unmatched_reason: 'order_not_found' }] }).expect(200);
     expect(await summary('match=strong')).toMatchObject({ units: 4, unclear_units: 1, unclear_never_units: 0 });
+    // With no activation data, the page says why: a weak match here, and once the workbook doesn't list it, "not in the workbook yet".
+    expect(await summary('match=all')).toMatchObject({ unclear_units: 2, unclear_online_units: 1, unclear_not_tiktok_units: 0, unclear_not_in_workbook_units: 0 });
+    await db.query('DELETE FROM return_matches WHERE return_ref = $1', [ref(3)]);
+    expect(await summary('match=all')).toMatchObject({ unclear_units: 2, unclear_not_in_workbook_units: 1 });
   });
 });

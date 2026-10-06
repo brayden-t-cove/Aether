@@ -32,6 +32,7 @@ const PRODUCT_SELECT = `
          r.model AS replaces_model,
          (SELECT json_agg(json_build_object('id', n.id, 'name', n.name, 'model', n.model, 'lifecycle', n.lifecycle) ORDER BY n.name)
             FROM products n WHERE n.replaces_id = p.id) AS replaced_by,
+         ARRAY(SELECT a.alias FROM product_aliases a WHERE a.product_id = p.id ORDER BY a.created_at, a.alias) AS aliases,
          (SELECT count(*)::int FROM projects pr WHERE pr.product_id = p.id) AS project_count,
          (SELECT count(*)::int FROM projects pr WHERE pr.product_id = p.id AND pr.state <> 'done') AS open_project_count
     FROM products p
@@ -47,7 +48,10 @@ export async function listProducts(db, { lifecycle, q } = {}) {
   if (q) {
     params.push(`%${q}%`);
     const n = params.length;
-    where.push(`(p.name ILIKE $${n} OR p.sku ILIKE $${n} OR p.model ILIKE $${n} OR p.category ILIKE $${n})`);
+    where.push(
+      `(p.name ILIKE $${n} OR p.sku ILIKE $${n} OR p.model ILIKE $${n} OR p.category ILIKE $${n}
+        OR EXISTS (SELECT 1 FROM product_aliases a WHERE a.product_id = p.id AND a.alias ILIKE $${n}))`,
+    );
   }
   const { rows } = await db.query(
     `${PRODUCT_SELECT}

@@ -16,8 +16,12 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
   });
   afterAll(() => db?.end());
 
-  it('seeds every category and sub-reason', () => {
-    expect(codebook).toHaveLength(12);
+  it('has six buckets plus Other, each with a definition, and keeps every sub-reason', () => {
+    expect(codebook.map((c) => c.name)).toEqual([
+      'Connectivity', 'Fit & Installation', 'Subscription', 'Performance / Hardware', 'Shipping, Logistics, Missing Parts / Damaged',
+      'Changed Mind', 'Other', 'No Comment', 'Sample Program', 'Not a Customer Return',
+    ]);
+    expect(codebook.every((c) => c.description.length > 20)).toBe(true);
     expect(codebook.flatMap((c) => c.subreasons)).toHaveLength(50);
     expect(category('connectivity').subreasons.map((s) => s.name)).toEqual([
       "Won't connect / pair at setup",
@@ -25,13 +29,20 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
       'Router / ISP / 5GHz incompatibility',
       'Bluetooth / phone pairing',
       'Weak signal outdoors / through window',
+      'Smart-home / Alexa / RTSP integration',
     ]);
+    // Hardware and the app side of setup joined Performance; trust went to Other.
+    expect(category('performance').subreasons.map((s) => s.key)).toEqual([
+      'image_quality', 'motion', 'lag', 'not_recording', 'wont_power_on', 'support_confirmed', 'works_then_dies', 'overheating',
+      'app_setup', 'no_manual', 'firmware',
+    ]);
+    expect(category('non_specific').subreasons.map((s) => s.key)).toEqual(['vague', 'trust']);
   });
 
-  it('breaks ties shipping first and non-specific last', () => {
+  it('breaks ties shipping first and Other last', () => {
     const ranked = codebook.filter((c) => c.tie_break_rank !== null).sort((a, b) => a.tie_break_rank - b.tie_break_rank);
     expect(ranked.map((c) => c.key)).toEqual([
-      'shipping', 'connectivity', 'subscription', 'fit', 'performance', 'hardware', 'setup', 'changed_mind', 'non_specific',
+      'shipping', 'connectivity', 'subscription', 'fit', 'performance', 'changed_mind', 'non_specific',
     ]);
   });
 
@@ -44,8 +55,8 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
     await request(app).get('/api/returns/codebook').expect(401);
     const { agent } = await signedInAgent(app, db, { email: 'reader@example.com' });
     const res = await agent.get('/api/returns/codebook').expect(200);
-    expect(res.body.categories).toHaveLength(12);
-    expect(res.body.categories[1]).toMatchObject({ key: 'connectivity', in_share: true, set_aside: false });
+    expect(res.body.categories).toHaveLength(10);
+    expect(res.body.categories[0]).toMatchObject({ key: 'connectivity', in_share: true, set_aside: false });
   });
 
   describe('on a return', () => {
