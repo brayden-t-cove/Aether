@@ -2112,6 +2112,53 @@ table.comparison .luna-col {
   }
 }
 
+/* What's connected to each product: how each group of returns was matched. */
+.via-listing {
+  border-color: var(--status-good);
+}
+.via-guess {
+  border-color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+}
+.via-conflict {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.via-row-conflict td {
+  background: var(--danger-soft);
+}
+.conn-card h3 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+.conn-head h2 {
+  margin: 0;
+}
+.conn-head p {
+  margin: 0.15rem 0 0;
+}
+.conn-listings {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+.conn-title {
+  max-width: 26rem;
+}
+.conn-title span[title] {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.conn-move {
+  flex-wrap: nowrap;
+}
+.conn-move select {
+  max-width: 12rem;
+}
+
 /* A buyer's note in the import preview: a few lines, the rest on hover. */
 .import-note {
   max-width: 22rem;

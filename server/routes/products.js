@@ -4,12 +4,12 @@ import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
 import { diff, withTransaction } from '../lib/db.js';
-import { parse } from '../lib/validate.js';
+import { isUuid, parse, v } from '../lib/validate.js';
 import { listProjects } from '../lib/projects.js';
 import { pruneOrphanAttachments } from '../lib/attachments.js';
 import { vendorsForProduct } from '../lib/vendors.js';
 import { markDistinct, mergeProducts, suggestDuplicates } from '../lib/productMerge.js';
-import { v } from '../lib/validate.js';
+import { moveReturns, productConnections } from '../lib/connections.js';
 import {
   createProduct,
   deleteProduct,
@@ -42,6 +42,13 @@ function assertEditable(product, fields) {
 
 const PAIR_FIELDS = { product_id: v.id({ label: 'Product' }), other_id: v.id({ label: 'Other product' }) };
 const MERGE_FIELDS = { merge_id: v.id({ label: 'Product to merge' }) };
+const MOVE_FIELDS = {
+  channel: v.text({ label: 'Channel', max: 20 }),
+  external_id: v.text({ label: 'Listing ID', max: 100 }),
+  sku: v.text({ label: 'SKU', max: 100 }),
+  product_label: v.text({ label: 'Product title', max: 300 }),
+  to_product_id: v.id({ label: 'Product' }),
+};
 
 export function productRoutes({ db, files }) {
   const router = Router();
@@ -53,6 +60,27 @@ export function productRoutes({ db, files }) {
       const lifecycle = Object.hasOwn(LIFECYCLES, req.query.lifecycle ?? '') ? req.query.lifecycle : undefined;
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
       res.json({ products: await listProducts(db, { lifecycle, q }) });
+    }),
+  );
+
+  // Everything connected to each product (listings, and returns grouped by how they were matched), to check for mix-ups.
+  router.get(
+    '/api/products/connections',
+    requireAuth,
+    asyncHandler(async (req, res) => res.json(await productConnections(db))),
+  );
+
+  // Move a group of returns (and its listing) to another product, or back to unmatched with to_product_id null.
+  router.post(
+    '/api/products/:id/move-returns',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      if (!isUuid(req.params.id)) throw new HttpError(404, 'Product not found');
+      const f = parse(req.body, MOVE_FIELDS, { required: ['channel'] });
+      const result = await withTransaction(db, (tx) =>
+        moveReturns(tx, { fromProductId: req.params.id, ...f, toProductId: f.to_product_id ?? null, userId: req.user.id }),
+      );
+      res.json(result);
     }),
   );
 
