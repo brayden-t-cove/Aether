@@ -1509,3 +1509,82 @@ table.comparison .luna-col {
 .page-tabs .tab {
   white-space: nowrap;
 }
+
+/* ── Item updates ─────────────────────────────────────────────────────── */
+
+.state-note,
+.item-latest {
+  margin: 0.25rem 0 0.25rem 10.25rem;
+}
+.state-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: 40rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+.item-latest {
+  display: block;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 10.25rem);
+}
+.item-latest:hover .item-latest-body {
+  color: var(--accent);
+}
+.updates h3 {
+  margin-bottom: 0.4rem;
+}
+.update-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.update {
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+}
+.update-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.update-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.update-body {
+  margin: 0.2rem 0 0;
+}
+.link-btn.danger {
+  color: var(--danger);
+}
+@media (max-width: 800px) {
+  .state-note,
+  .item-latest {
+    margin-left: 0;
+    max-width: 100%;
+  }
+}
+.dash-latest {
+  margin-top: 0.15rem;
+}
+.item {
+  scroll-margin-top: 4.5rem;
+}

@@ -9,6 +9,8 @@ import { getMarket } from '../lib/markets.js';
 import { pruneOrphanAttachments } from '../lib/attachments.js';
 import { messages } from '../lib/notify.js';
 import { getTemplate, listTemplates } from '../lib/templates.js';
+import { hasRole } from '../../shared/roles.js';
+import { addComment, COMMENT_BODY, deleteComment, editComment, getComment, listComments } from '../lib/comments.js';
 import {
   createProject,
   deleteProject,
@@ -44,6 +46,9 @@ async function loadItem(db, id) {
 
 // Only pass through query filters that are valid IDs, so bad input can't hit the database as a 500.
 const idParam = (value) => (isUuid(value) ? value : undefined);
+
+// The first line of an update, short enough for the activity log.
+const excerpt = (body) => (body.length > 140 ? `${body.slice(0, 140)}…` : body);
 
 // Item changes are logged against their project, so a project's history shows everything that happened in it.
 const logItem = (db, item, action, changes, userId) =>
@@ -211,14 +216,20 @@ export function projectRoutes({ db, files, notify }) {
     asyncHandler(async (req, res) => {
       const before = await loadItem(db, req.params.id);
       const fields = parse(req.body, ITEM_FIELDS);
-      const item = await updateItem(db, before, fields);
+      // An optional update saved with the change, usually why the state changed.
+      const note = COMMENT_BODY(req.body?.comment);
+      const { item, comment } = await withTransaction(db, async (tx) => {
+        const updated = await updateItem(tx, before, fields);
+        return { item: updated, comment: note ? await addComment(tx, { item: updated, body: note, stateFrom: before.state, userId: req.user.id }) : null };
+      });
       if (fields.state === 'blocked' && before.state !== 'blocked' && notify?.enabled) {
         const project = await getProject(db, item.project_id);
-        notify.send(messages.itemBlocked(notify, { item, project, who: req.user.name || req.user.email }));
+        notify.send(messages.itemBlocked(notify, { item, project, reason: note, who: req.user.name || req.user.email }));
       }
       const changes = diff(before, fields, Object.keys(fields).filter((k) => k !== 'position'));
       if (Object.keys(changes).length) await logItem(db, item, 'item_updated', changes, req.user.id);
-      res.json({ item });
+      if (comment) await logItem(db, item, 'comment_added', { excerpt: excerpt(comment.body) }, req.user.id);
+      res.json({ item, comment });
     }),
   );
 
@@ -230,6 +241,66 @@ export function projectRoutes({ db, files, notify }) {
       await deleteItem(db, item.id);
       await cleanupFiles();
       await logItem(db, item, 'item_removed', {}, req.user.id);
+      res.json({ ok: true });
+    }),
+  );
+
+  // ── Updates (comments) on items ──────────────────────────────────────────
+
+  router.get(
+    '/api/items/:id/comments',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const item = await loadItem(db, req.params.id);
+      res.json({ comments: await listComments(db, item.id) });
+    }),
+  );
+
+  router.post(
+    '/api/items/:id/comments',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const item = await loadItem(db, req.params.id);
+      const body = COMMENT_BODY(req.body?.body);
+      if (!body) throw new HttpError(400, 'Write an update first');
+      const comment = await addComment(db, { item, body, userId: req.user.id });
+      await logItem(db, item, 'comment_added', { excerpt: excerpt(comment.body) }, req.user.id);
+      res.status(201).json({ comment });
+    }),
+  );
+
+  async function loadOwnComment(req) {
+    const comment = isUuid(req.params.id) ? await getComment(db, req.params.id) : null;
+    if (!comment) throw new HttpError(404, 'Update not found');
+    return comment;
+  }
+
+  // Only the person who wrote an update can change it.
+  router.patch(
+    '/api/comments/:id',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const before = await loadOwnComment(req);
+      if (before.created_by !== req.user.id) throw new HttpError(403, 'Only the person who wrote an update can edit it');
+      const body = COMMENT_BODY(req.body?.body);
+      if (!body) throw new HttpError(400, 'An update can’t be empty. Delete it instead.');
+      const comment = await editComment(db, before.id, body);
+      const item = await loadItem(db, before.item_id);
+      await logItem(db, item, 'comment_edited', { excerpt: excerpt(body) }, req.user.id);
+      res.json({ comment });
+    }),
+  );
+
+  // The writer can delete their own update; admins can delete any.
+  router.delete(
+    '/api/comments/:id',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const comment = await loadOwnComment(req);
+      if (comment.created_by !== req.user.id && !hasRole(req.user.role, 'admin')) throw new HttpError(403, 'Only the writer or an admin can delete an update');
+      await deleteComment(db, comment.id);
+      const item = await loadItem(db, comment.item_id);
+      await logItem(db, item, 'comment_deleted', { excerpt: excerpt(comment.body) }, req.user.id);
       res.json({ ok: true });
     }),
   );

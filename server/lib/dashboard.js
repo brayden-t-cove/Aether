@@ -1,5 +1,6 @@
 import { BLOCKED_SQL, listProjects } from './projects.js';
 import { listActivity } from './activity.js';
+import { LATEST_COMMENT_SQL } from './comments.js';
 import { EXPIRY_WARNING_DAYS } from '../../shared/workflow.js';
 
 const ITEM_SELECT = `
@@ -13,7 +14,8 @@ const ITEM_SELECT = `
          ) AS waiting_on,
          (SELECT count(*)::int FROM item_dependencies d
             JOIN checklist_items w ON w.id = d.item_id
-           WHERE d.blocked_by_id = i.id AND w.state <> 'done') AS holds_up
+           WHERE d.blocked_by_id = i.id AND w.state <> 'done') AS holds_up,
+         ${LATEST_COMMENT_SQL('i')}
     FROM checklist_items i
     JOIN projects p ON p.id = i.project_id
     LEFT JOIN users u ON u.id = i.owner_id`;

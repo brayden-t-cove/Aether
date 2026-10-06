@@ -17,6 +17,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for scope, modules, the data model and th
 - **Starting checklists** (`server/lib/templates.js`) come from the team's launch checklists and are organised in stages. *US launch (new product)* runs from validating the product through samples, manual and packaging, listings, launch and post launch. *International launch* takes an existing product into a new country and fills in that market's marks, plug, voltage and languages. Items already wait on the steps they depend on.
 - **Stages:** items can belong to a stage, and the project page lists them stage by stage. Items without stages are grouped by category.
 - **States** are shared by projects and items: Not started, In progress, Blocked, In review, Done.
+- **Updates:** each item has a dated thread of updates saying where it stands and why. Changing an item's state asks why (optional; for Blocked it asks what's blocking it), and the note is saved with the change, so the thread reads "In progress → Blocked: lab booked until November". The latest update shows under the item on the checklist and on the dashboard; a Blocked note goes into the Slack post and the daily digest. Writers can edit or delete their own updates; admins can delete any.
 
 ## Certifications, manuals and design work (Phase 2)
 
