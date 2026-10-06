@@ -105,6 +105,33 @@ test('an unmatched return is assigned and future imports learn the match', async
   await expect(page.getByRole('link', { name: /returned$/ })).toHaveCount(0);
 });
 
+test("what's connected shows how each product's returns were matched, and a group can be moved", async ({ page }) => {
+  await login(page, 'editor');
+  await page.goto('/products');
+  await page.getByRole('link', { name: 'What’s connected' }).click();
+  await expect(page.getByRole('heading', { name: 'What’s connected to each product' })).toBeVisible();
+  const card = (name) => page.getByRole('region', { name, exact: true });
+  // The doorbell's returns came in through its ASIN listing; the W4 return was matched from its title.
+  await expect(card('Sample Doorbell').locator('tr', { hasText: 'B0SAMPLE1' })).toContainText('Listing');
+  const w4 = card('Sample Window Cam').locator('tr', { hasText: 'Sample W4 window camera' });
+  await expect(w4).toContainText('Guessed at import');
+
+  await page.getByLabel('Only products with something to check').check();
+  await expect(card('Sample Doorbell')).toHaveCount(0);
+  await expect(card('Sample Window Cam')).toBeVisible();
+
+  // Move it to the V2 and back: its SKU becomes a listing, so it's no longer a guess.
+  await w4.getByLabel(/^Move .* to$/).selectOption({ label: 'Sample Window Cam (V2) (SW-200)' });
+  await w4.getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(page.getByText('Nothing to check: every group is matched by a listing.')).toBeVisible();
+  await page.getByLabel('Only products with something to check').uncheck();
+  const moved = card('Sample Window Cam (V2)').locator('tr', { hasText: 'Sample W4 window camera' });
+  await expect(moved).toContainText('Listing');
+  await moved.getByLabel(/^Move .* to$/).selectOption({ label: 'Sample Window Cam (W4)' });
+  await moved.getByRole('button', { name: 'Move', exact: true }).click();
+  await expect(card('Sample Window Cam').locator('tr', { hasText: 'Sample W4 window camera' })).toContainText('Listing');
+});
+
 test('a comparison grid is built and its cells persist', async ({ page }) => {
   await login(page, 'editor');
   await nav(page, 'Comparisons');

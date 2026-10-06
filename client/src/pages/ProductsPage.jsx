@@ -40,11 +40,16 @@ export default function ProductsPage() {
           <h1>Products</h1>
           <p className="muted">Luna's catalog: what's selling, what's coming and what's been retired.</p>
         </div>
-        {can('editor') && !adding && (
-          <button className="btn primary" onClick={() => setAdding(true)}>
-            Add product
-          </button>
-        )}
+        <div className="row">
+          <Link className="btn" to="/products/connections">
+            What’s connected
+          </Link>
+          {can('editor') && !adding && (
+            <button className="btn primary" onClick={() => setAdding(true)}>
+              Add product
+            </button>
+          )}
+        </div>
       </header>
 
       <SyncStatus

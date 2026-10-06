@@ -134,6 +134,8 @@ export function describeActivity(a) {
       if (a.action === 'variant_removed') return `${who} removed variant ${label}`;
       if (a.action === 'merged') return `${who} merged ${c.merged} into ${label}`;
       if (a.action === 'merged_into') return `${who} merged ${label} into ${c.into}`;
+      if (a.action === 'returns_moved') return `${who} moved ${c.rows} returns (${c.returns}) from ${label} to ${c.to}`;
+      if (a.action === 'returns_moved_in') return `${who} moved ${c.rows} returns (${c.returns}) to ${label} from ${c.from}`;
       if (a.action === 'marked_distinct') return `${who} marked ${label} and ${c.other} as different products`;
     // falls through
     case 'market':
