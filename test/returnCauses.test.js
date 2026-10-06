@@ -58,10 +58,10 @@ describe.skipIf(!TEST_DATABASE_URL)('what’s behind the returns', () => {
   });
   afterAll(() => db?.end());
 
-  it('gives every connectivity, fit, hardware and performance sub-reason a cause', async () => {
+  it('gives every connectivity, fit and performance / hardware sub-reason a cause', async () => {
     const { rows } = await db.query(
       `SELECT c.key AS category, s.key, s.cause FROM return_subreasons s JOIN return_categories c ON c.id = s.category_id
-        WHERE c.key IN ('connectivity', 'fit', 'hardware', 'performance') ORDER BY c.sort_order, s.sort_order`,
+        WHERE c.key IN ('connectivity', 'fit', 'performance') AND s.key <> 'trust' ORDER BY c.sort_order, s.sort_order`,
     );
     expect(rows.filter((r) => r.cause === null)).toEqual([]);
     expect(rows.filter((r) => r.category === 'connectivity').map((r) => [r.key, r.cause])).toEqual([
@@ -70,6 +70,7 @@ describe.skipIf(!TEST_DATABASE_URL)('what’s behind the returns', () => {
       ['router_isp', 'conditions'],
       ['bluetooth', 'unclear'],
       ['weak_signal', 'conditions'],
+      ['smart_home', 'conditions'],
     ]);
   });
 

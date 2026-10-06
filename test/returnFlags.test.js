@@ -92,7 +92,7 @@ describe.skipIf(!TEST_DATABASE_URL)('flags and secondary categories on returns',
     const id = await idOf('FL-2'); // main category: Fit & Installation
     await viewer.put(`/api/returns/${id}/secondary`).send({ categories: ['performance'] }).expect(403);
     const res = await editor.put(`/api/returns/${id}/secondary`).send({ categories: ['performance', 'fit', 'no_comment', 'performance'] }).expect(200);
-    expect(res.body.secondary).toEqual(['Performance & Quality']);
+    expect(res.body.secondary).toEqual(['Performance / Hardware']);
     expect((await listReturns(db)).find((r) => r.return_ref === 'FL-2').secondary).toEqual(['performance']);
 
     await editor.put(`/api/returns/${id}/secondary`).send({ categories: ['made_up'] }).expect(400);
@@ -101,6 +101,6 @@ describe.skipIf(!TEST_DATABASE_URL)('flags and secondary categories on returns',
     expect((await listReturns(db)).find((r) => r.return_ref === 'FL-2').secondary).toEqual([]);
 
     const { body } = await viewer.get('/api/activity').expect(200);
-    expect(body.activity.filter((a) => a.action === 'secondary_updated').map((a) => a.changes.categories)).toEqual([[], ['Performance & Quality']]);
+    expect(body.activity.filter((a) => a.action === 'secondary_updated').map((a) => a.changes.categories)).toEqual([[], ['Performance / Hardware']]);
   });
 });

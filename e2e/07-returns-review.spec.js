@@ -13,15 +13,15 @@ test('an editor confirms a call the rules made', async ({ page }) => {
 
   await page.getByRole('tab', { name: 'Not yet reviewed (1)' }).click();
   const row = page.locator('tr', { hasText: 'Stopped working' });
-  await expect(row).toContainText('Hardware Defect / DOA');
+  await expect(row).toContainText('Performance / Hardware');
   await expect(row).toContainText('note matched: "stopped working"');
   // Flags and other categories the note mentions ride alongside the call.
   const flag = row.getByRole('button', { name: 'Support contacted, unresolved' });
   await expect(flag).toHaveAttribute('aria-pressed', 'false');
   await flag.click();
   await expect(flag).toHaveAttribute('aria-pressed', 'true');
-  await row.getByLabel('Add another category').selectOption('performance');
-  await expect(row).toContainText('Also about: Performance & Quality');
+  await row.getByLabel('Add another category').selectOption('connectivity');
+  await expect(row).toContainText('Also about: Connectivity');
   await page.getByLabel('Filter by flag').selectOption('looks_used');
   await expect(page.getByText('Every call the rules made has been reviewed.')).toBeVisible();
   await page.getByLabel('Filter by flag').selectOption('support_unresolved');

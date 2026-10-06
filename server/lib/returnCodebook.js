@@ -4,7 +4,7 @@
 export async function getCodebook(db) {
   // One after the other: this also runs inside import transactions, on a single client.
   const categories = await db.query(
-    `SELECT id, key, name, sort_order, tie_break_rank, in_share, set_aside
+    `SELECT id, key, name, description, sort_order, tie_break_rank, in_share, set_aside
        FROM return_categories ORDER BY sort_order, name`,
   );
   const subreasons = await db.query(

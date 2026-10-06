@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { CHANNELS, MATCH_VIEWS, RETURN_FLAGS } from '../../shared/workflow.js';
+import { BUCKET_KEYS } from '../../shared/returnBuckets.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
@@ -35,6 +36,8 @@ function readFilters(q) {
     flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
     match: Object.hasOwn(MATCH_VIEWS, q.match ?? '') ? q.match : undefined,
     blank: q.blank === '1',
+    bucket: BUCKET_KEYS.includes(q.bucket) ? q.bucket : undefined,
+    noted: q.noted === '1',
   };
 }
 
@@ -57,7 +60,9 @@ export function returnRoutes({ db, notify }) {
   router.get(
     '/api/returns/summary',
     requireAuth,
-    asyncHandler(async (req, res) => res.json(await returnsSummary(db, readFilters(req.query)))),
+    asyncHandler(async (req, res) =>
+      res.json(await returnsSummary(db, { ...readFilters(req.query), trendFrom: DATE.test(req.query.trendFrom ?? '') ? req.query.trendFrom : undefined })),
+    ),
   );
 
   // Returns per Monday-to-Sunday week, for the dashboard views. ?weeks=12&end=YYYY-MM-DD plus the usual filters.
@@ -80,6 +85,28 @@ export function returnRoutes({ db, notify }) {
     '/api/returns/codebook',
     requireAuth,
     asyncHandler(async (req, res) => res.json({ categories: await getCodebook(db) })),
+  );
+
+  // A bucket's definition, shown in the Returns page's key.
+  router.patch(
+    '/api/returns/categories/:key',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const { description } = parse(req.body, { description: v.text({ label: 'Definition', max: 1000 }) }, { required: ['description'] });
+      const { rows } = await db.query('SELECT key, name, description FROM return_categories WHERE key = $1', [req.params.key]);
+      if (!rows[0]) throw new HttpError(404, 'Category not found');
+      if (rows[0].description !== description) {
+        await db.query('UPDATE return_categories SET description = $2 WHERE key = $1', [rows[0].key, description]);
+        await logActivity(db, {
+          entityType: 'return_category',
+          entityId: rows[0].key,
+          action: 'definition_updated',
+          changes: { label: rows[0].name, from: rows[0].description, to: description },
+          userId: req.user.id,
+        });
+      }
+      res.json({ category: { ...rows[0], description } });
+    }),
   );
 
   router.get(

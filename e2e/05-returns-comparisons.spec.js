@@ -20,7 +20,7 @@ test('a listing is added on the product page', async ({ page }) => {
 test('an Amazon returns report is previewed, imported, and re-importing is harmless', async ({ page, request }) => {
   await login(page, 'editor');
   await nav(page, 'Returns');
-  await expect(page.getByText('No returns in this period yet.')).toBeVisible();
+  await expect(page.getByText(/^No returns in .* yet\.$/)).toBeVisible();
   await page.getByRole('link', { name: 'Import returns' }).first().click();
   await field(page, 'Market', 'select').selectOption({ label: 'US · United States' });
   await page.getByLabel('Returns report file').setInputFiles('e2e/fixtures/amazon-returns.tsv');
@@ -40,42 +40,56 @@ test('an Amazon returns report is previewed, imported, and re-importing is harml
   await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeDisabled();
 });
 
-test('the returns page charts the trend, reasons and products, with a table view', async ({ page }) => {
+test('the returns page shows one month: buckets, comments, the key, platform vs notes and products', async ({ page }) => {
   await login(page);
-  await page.goto('/returns?period=all');
+  await page.goto('/returns?month=2026-09');
   const stat = (label) => page.locator('.stat', { hasText: label }).locator('.stat-value');
-  // The carrier-damaged return never reached a customer, so it's set aside; it still waits for a product.
-  await expect(stat('Units returned')).toHaveText('4');
-  await expect(stat('Product fault')).toHaveText('100%'); // the one return with a note: "Stopped working"
-  const causes = page.getByRole('list', { name: 'Units by cause' });
-  await expect(causes).toContainText('Product fault');
-  await expect(causes).toContainText('Connectivity, cause unclear');
-  await expect(page.getByText('Set aside and not counted: 1 unit, 20% of all returns in this period (1 damaged by carrier).')).toBeVisible();
-  await expect(stat('Top category')).toHaveText('Hardware Defect / DOA');
+  // September: the W4 return with no note. The carrier-damaged one never reached a customer, so it's set aside; it still waits for a product.
+  await expect(page.getByLabel('Month to show')).toHaveValue('2026-09');
+  await expect(stat('Units returned')).toHaveText('1');
+  await expect(stat('Left a comment')).toHaveText('0%');
   await expect(stat('Not matched to a product')).toHaveText('1');
 
+  // The trend runs over the 12 months up to the one shown.
   const chart = page.getByRole('img', { name: 'Units returned per month by channel' });
-  await expect(chart).toBeVisible();
   await expect(chart.locator('.chart-value')).toHaveText(['1', '2', '1']); // Jul, Aug, Sep totals
   await chart.locator('g[tabindex="0"]').nth(1).hover();
   await expect(page.locator('.chart-tooltip')).toContainText('Amazon: 2');
-
   await page.getByRole('button', { name: 'Show table' }).click();
-  await expect(page.locator('table').first()).toContainText('Total');
+  await expect(page.locator('th', { hasText: 'Total' })).toBeVisible();
   await page.getByRole('button', { name: 'Show chart' }).click();
 
-  await expect(page.getByRole('list', { name: 'Units by category' })).toContainText('Hardware Defect / DOA');
-  await expect(page.getByText('Not counted: 3 units with no comment')).toBeVisible();
-  await expect(page.getByRole('list', { name: 'Reasons picked on the platform' })).toContainText('No longer needed');
+  await page.getByRole('button', { name: 'Previous month' }).click();
+  await expect(page.getByLabel('Month to show')).toHaveValue('2026-08');
+  await expect(stat('Units returned')).toHaveText('2');
+  await page.getByRole('button', { name: 'Previous month' }).click();
+  // July: one return, "Stopped working", picked as Defective.
+  await expect(stat('Units returned')).toHaveText('1');
+  await expect(stat('Left a comment')).toHaveText('100%');
+  await expect(stat('Top bucket')).toHaveText('Performance / Hardware');
+  await expect(page.locator('.donut-legend').first()).toContainText('Performance / Hardware1 · 100%');
+  await expect(page.locator('.donut-legend').nth(1)).toContainText('Left a comment1 · 100%');
+
+  // The key: every bucket with its definition; opening one shows its sub-reasons.
+  const bucket = page.getByRole('button', { name: /^Performance \/ Hardware/ });
+  await expect(bucket).toContainText("The camera connects but doesn't do its job");
+  await bucket.click();
+  await expect(page.getByRole('list', { name: 'Performance / Hardware by sub-reason' })).toContainText('Works briefly then dies');
+
+  const vs = page.getByRole('table', { name: "Platform reason against the buyer's note" });
+  await expect(vs.locator('tr', { hasText: 'Defective / does not work' })).toContainText('100%');
+
+  // A product opens in place, with what its buyers wrote, instead of filtering the page.
   const products = page.locator('.card', { hasText: 'By product' });
-  await expect(products.locator('tbody tr').first()).toContainText('Sample Doorbell');
   await products.getByRole('button', { name: 'Sample Doorbell' }).click();
-  await expect(stat('Units returned')).toHaveText('3');
+  await expect(products.locator('.product-detail')).toContainText('“Stopped working”');
+  await expect(stat('Units returned')).toHaveText('1');
+  await expect(page).not.toHaveURL(/productId/);
 });
 
 test('an unmatched return is assigned and future imports learn the match', async ({ page }) => {
   await login(page, 'editor');
-  await page.goto('/returns?period=all');
+  await page.goto('/returns?month=2026-09');
   const unmatched = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Returns not matched to a product' }) });
   await expect(unmatched).toContainText('Unknown gizmo');
   await unmatched.getByLabel('Product').selectOption({ label: 'Sample Hub (HB1 V2)' });

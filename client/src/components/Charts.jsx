@@ -106,7 +106,7 @@ function roundedTop(x, y, w, h, r) {
 }
 
 /** Horizontal bars with a value label on each. data: [{ label, value, hint? }] */
-/** Horizontal bars. Each item: { label, value, hint? (tooltip), note? (shown under the label), share? (a % shown after the value) }. */
+/** Horizontal bars. Each item: { label, value, hint? (tooltip), note? (shown under the label), share? (a % shown after the value), color? }. */
 export function HBars({ data, color = '--series-1', ariaLabel }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   const withShare = data.some((d) => d.share != null);
@@ -119,7 +119,7 @@ export function HBars({ data, color = '--series-1', ariaLabel }) {
             {d.note && <span className="hbar-note">{d.note}</span>}
           </span>
           <span className="hbar-track">
-            <span className="hbar-fill" style={{ width: `${(d.value / max) * 100}%`, background: `var(${color})` }} />
+            <span className="hbar-fill" style={{ width: `${(d.value / max) * 100}%`, background: `var(${d.color || color})` }} />
           </span>
           <span className="hbar-value">
             {d.value}
@@ -128,5 +128,94 @@ export function HBars({ data, color = '--series-1', ariaLabel }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * A donut: parts of one whole. data: [{ key, label, value, color }] with color a CSS variable name. Slices are
+ * separated by a 2px surface gap; the legend beside it names every slice with its value and share, so nothing
+ * relies on color alone. `center` is the big number in the middle, `centerLabel` the word under it.
+ */
+export function Donut({ data, ariaLabel, center, centerLabel, size = 180 }) {
+  const [hover, setHover] = useState(null);
+  const total = data.reduce((n, d) => n + d.value, 0);
+  const shown = data.filter((d) => d.value > 0);
+  const r = 70;
+  const stroke = 26;
+  const c = size / 2;
+  let angle = -Math.PI / 2;
+  const arcs = shown.map((d) => {
+    const sweep = total ? (d.value / total) * Math.PI * 2 : 0;
+    const start = angle;
+    angle += sweep;
+    return { ...d, start, end: angle, sweep };
+  });
+  const point = (a) => [c + r * Math.cos(a), c + r * Math.sin(a)];
+  const path = (a) => {
+    // A whole circle can't be one arc: draw it as two halves.
+    if (a.sweep >= Math.PI * 2 - 1e-6) {
+      const [x1, y1] = point(a.start);
+      const [x2, y2] = point(a.start + Math.PI);
+      return `M${x1},${y1} A${r},${r} 0 1 1 ${x2},${y2} A${r},${r} 0 1 1 ${x1},${y1}`;
+    }
+    const [x1, y1] = point(a.start);
+    const [x2, y2] = point(a.end);
+    return `M${x1},${y1} A${r},${r} 0 ${a.sweep > Math.PI ? 1 : 0} 1 ${x2},${y2}`;
+  };
+  const share = (v) => (total ? Math.round((v / total) * 100) : 0);
+  const active = hover !== null ? arcs[hover] : null;
+
+  return (
+    <div className="donut">
+      <div className="donut-figure">
+        <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={ariaLabel} className="donut-svg">
+          {arcs.length === 0 && <circle cx={c} cy={c} r={r} fill="none" strokeWidth={stroke} className="donut-empty" />}
+          {arcs.map((a, i) => (
+            <path
+              key={a.key}
+              d={path(a)}
+              fill="none"
+              stroke={`var(${a.color})`}
+              strokeWidth={hover === i ? stroke + 6 : stroke}
+              className="donut-slice"
+              tabIndex={0}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onFocus={() => setHover(i)}
+              onBlur={() => setHover(null)}
+            >
+              <title>{`${a.label}: ${a.value} (${share(a.value)}%)`}</title>
+            </path>
+          ))}
+          {/* The 2px gaps: surface-colored spokes at each slice boundary. */}
+          {arcs.length > 1 &&
+            arcs.map((a) => {
+              const [x1, y1] = [c + (r - stroke / 2 - 4) * Math.cos(a.start), c + (r - stroke / 2 - 4) * Math.sin(a.start)];
+              const [x2, y2] = [c + (r + stroke / 2 + 4) * Math.cos(a.start), c + (r + stroke / 2 + 4) * Math.sin(a.start)];
+              return <line key={`gap-${a.key}`} x1={x1} y1={y1} x2={x2} y2={y2} className="donut-gap" />;
+            })}
+          <text x={c} y={c - 2} textAnchor="middle" className="donut-center">
+            {active ? `${share(active.value)}%` : center}
+          </text>
+          <text x={c} y={c + 18} textAnchor="middle" className="donut-center-label">
+            {active ? active.label : centerLabel}
+          </text>
+        </svg>
+      </div>
+      <ul className="donut-legend">
+        {data.map((d) => {
+          const i = arcs.findIndex((a) => a.key === d.key);
+          return (
+            <li key={d.key} className={i >= 0 && hover === i ? 'is-active' : ''} onMouseEnter={() => i >= 0 && setHover(i)} onMouseLeave={() => setHover(null)}>
+              <span className="legend-swatch" style={{ background: `var(${d.color})` }} aria-hidden="true" />
+              <span className="donut-legend-label">{d.label}</span>
+              <span className="donut-legend-value">
+                {d.value} <span className="muted">· {share(d.value)}%</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

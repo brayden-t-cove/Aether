@@ -110,7 +110,7 @@ describe.skipIf(!TEST_DATABASE_URL)('importing an Amazon returns report', () => 
     const { body } = await editor.post('/api/returns/import').send({ channel: 'amazon', rows: OCTOBER, filename: 'oct.csv' }).expect(200);
     expect(body.import.created_count).toBe(1);
     expect(await ret('111-0000001-0000001')).toMatchObject({ quantity: 3, units: 3, return_date: '2026-09-01', note_clean: 'Both cameras keep going offline every night, even next to the router' });
-    expect(await ret('111-0000004-0000004')).toMatchObject({ note_clean: "Won't turn on", category: 'hardware', subreason: 'wont_power_on' });
+    expect(await ret('111-0000004-0000004')).toMatchObject({ note_clean: "Won't turn on", category: 'performance', subreason: 'wont_power_on' });
 
     await admin.delete(`/api/returns/imports/${body.import.id}`).expect(200);
     expect(await ret('111-0000004-0000004')).toBeUndefined();

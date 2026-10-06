@@ -5,7 +5,7 @@ import { makeApp, setupDb, signedInAgent, TEST_DATABASE_URL } from './helpers.js
 
 // Same ranks the migration seeds; the database tests below check they agree.
 const rank = new Map(
-  ['shipping', 'connectivity', 'subscription', 'fit', 'performance', 'hardware', 'setup', 'changed_mind', 'non_specific'].map((k, i) => [k, i + 1]),
+  ['shipping', 'connectivity', 'subscription', 'fit', 'performance', 'changed_mind', 'non_specific'].map((k, i) => [k, i + 1]),
 );
 const sort = (customer_comment, extra = {}) => {
   const r = sortReturn({ channel: 'tiktok', customer_comment, ...extra }, { rank });
@@ -73,9 +73,19 @@ describe('sorting a return', () => {
     expect(sort('No slot for an SD card')).toBe('subscription/sd_card');
     expect(sort('Our windows are tinted')).toBe('fit/window');
     expect(sort('Motion alerts come an hour late')).toBe('performance/motion');
-    expect(sort('It will not turn on at all')).toBe('hardware/wont_power_on');
-    expect(sort('No instructions in the box')).toBe('setup/no_manual');
-    expect(sort('Does not work with Alexa')).toBe('setup/smart_home');
+    expect(sort('It will not turn on at all')).toBe('performance/wont_power_on');
+    expect(sort('No instructions in the box')).toBe('performance/no_manual');
+    expect(sort('Does not work with Alexa')).toBe('connectivity/smart_home');
+    expect(sort('Item arrived damaged')).toBe('shipping/damaged_package');
+    expect(sort('Is this a fake? Looks like a knock off')).toBe('non_specific/trust');
+    expect(sort('Camera will not charge. No charging cable included')).toBe('shipping/wrong_missing');
+    expect(sort('Item was due by 11am. Didn’t arrive until 6pm')).toBe('shipping/late');
+    expect(sort('La cámara no empareja con el celular')).toBe('connectivity/wont_connect');
+    expect(sort('It will not charge at all')).toBe('performance/wont_power_on');
+    // "Cover" as in an accessory isn't the camera's coverage.
+    expect(sort('I wish it had a silicone cover like my phone')).toBe(null);
+    expect(sort('It does not cover the whole driveway')).toBe('fit/view_angle');
+    expect(sort('Won’t connect to our internet. Tried multiple times, never got it to work')).toBe('connectivity/wont_connect');
     expect(sort('Ordered it by mistake')).toBe('changed_mind/mistake');
     expect(sort('Was a gift, no longer needed')).toBe('changed_mind/circumstances');
   });

@@ -94,6 +94,9 @@ export function describeActivity(a) {
       if (a.action === 'sorted') return `${who} re-sorted returns (${c.sorted} sorted, ${c.unsorted} left for review)`;
       if (a.action === 'matches_uploaded') return `${who} uploaded customer matches from ${label} (${c.added} new, ${c.changed} changed)`;
       break;
+    case 'return_category':
+      if (a.action === 'definition_updated') return `${who} updated the definition of ${label}`;
+      break;
     case 'returns_import':
       if (a.action === 'imported') return `${who} imported ${c.rows} ${c.channel} returns (${c.units} units)`;
       if (a.action === 'deleted') return `${who} undid a returns import (${c.rows} returns)`;
@@ -129,6 +132,9 @@ export function describeActivity(a) {
       if (a.action === 'variant_added') return `${who} added variant ${label}`;
       if (a.action === 'variant_updated') return `${who} updated variant ${label}`;
       if (a.action === 'variant_removed') return `${who} removed variant ${label}`;
+      if (a.action === 'merged') return `${who} merged ${c.merged} into ${label}`;
+      if (a.action === 'merged_into') return `${who} merged ${label} into ${c.into}`;
+      if (a.action === 'marked_distinct') return `${who} marked ${label} and ${c.other} as different products`;
     // falls through
     case 'market':
       if (a.action === 'created') return `${who} added ${a.entity_type} ${label}`;
@@ -150,7 +156,7 @@ export function activityLink(a) {
   if (a.entity_type === 'design_request') return `/design-requests/${a.entity_id}`;
   if (a.entity_type === 'vendor') return `/vendors/${a.entity_id}`;
   if (a.entity_type === 'sync') return '/products';
-  if (a.entity_type === 'returns_import' || a.entity_type === 'returns') return '/returns';
+  if (a.entity_type === 'returns_import' || a.entity_type === 'returns' || a.entity_type === 'return_category') return '/returns';
   if (a.entity_type === 'return') return '/returns/review';
   if (a.entity_type === 'comparison') return `/comparisons/${a.entity_id}`;
   return null;
