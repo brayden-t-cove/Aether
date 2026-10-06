@@ -6,8 +6,8 @@ import { createPool } from '../server/db/pool.js';
 import { listMigrations, migrate } from '../server/db/migrate.js';
 import { TEST_DATABASE_URL } from './helpers.js';
 
-// Migration 016 turns each checklist item's notes into its first update. Run everything before it, add items
-// with notes the old way, then run 016 and check the notes became dated, credited entries.
+// Migration 017 turns each checklist item's notes into its first update. Run everything before it, add items
+// with notes the old way, then run 017 and check the notes became dated, credited entries.
 describe.skipIf(!TEST_DATABASE_URL)('moving item notes into updates', () => {
   let db, dir;
 
@@ -15,7 +15,7 @@ describe.skipIf(!TEST_DATABASE_URL)('moving item notes into updates', () => {
     db = createPool({ connectionString: TEST_DATABASE_URL });
     await db.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
     dir = await mkdtemp(join(tmpdir(), 'aether-migrations-'));
-    for (const m of await listMigrations()) if (m.version < '016') await cp(m.path, join(dir, m.file));
+    for (const m of await listMigrations()) if (m.version < '017') await cp(m.path, join(dir, m.file));
     await migrate(db, { dir, log: () => {} });
   });
   afterAll(async () => {
