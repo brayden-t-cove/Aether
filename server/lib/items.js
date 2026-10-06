@@ -10,7 +10,6 @@ export const ITEM_FIELDS = {
   state: v.oneOf(STATES, { label: 'State' }),
   due_date: v.date({ label: 'Due date' }),
   evidence_url: v.url({ label: 'Evidence link' }),
-  notes: v.text({ label: 'Notes', max: 5000 }),
   position: v.int({ label: 'Position' }),
 };
 
@@ -49,8 +48,8 @@ export async function createItem(db, projectId, fields, userId) {
   const state = fields.state ?? 'not_started';
   const { rows } = await db.query(
     `INSERT INTO checklist_items
-       (project_id, title, stage, category, owner_id, state, due_date, evidence_url, notes, position, completed_at, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       (project_id, title, stage, category, owner_id, state, due_date, evidence_url, position, completed_at, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       projectId,
@@ -61,7 +60,6 @@ export async function createItem(db, projectId, fields, userId) {
       state,
       fields.due_date ?? null,
       fields.evidence_url ?? '',
-      fields.notes ?? '',
       fields.position ?? pos[0].next,
       state === 'done' ? new Date() : null,
       userId,

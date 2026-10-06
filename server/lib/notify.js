@@ -40,9 +40,9 @@ export function createNotifier({ slack = {}, publicUrl = '', appEnv = 'productio
 
 /** The messages Aether sends. Each takes the notifier plus the event's data. */
 export const messages = {
-  // The reason is the update written with the change, or else the item's notes.
+  // The reason is the update written with the change, if there was one.
   itemBlocked: (n, { item, project, who, reason }) =>
-    `🚧 ${n.link(`/projects/${project.id}`, item.title)} was marked *Blocked* in ${n.esc(project.name)} by ${n.esc(who)}${reason || item.notes ? `\n> ${n.esc(reason || item.notes).slice(0, 300)}` : ''}`,
+    `🚧 ${n.link(`/projects/${project.id}`, item.title)} was marked *Blocked* in ${n.esc(project.name)} by ${n.esc(who)}${reason ? `\n> ${n.esc(reason).slice(0, 300)}` : ''}`,
   projectDone: (n, { project, who }) => `✅ ${n.link(`/projects/${project.id}`, project.name)} is done (${n.esc(who)})`,
   certChanged: (n, { cert, state, who }) =>
     `${state === 'certified' ? '✅' : '❌'} ${n.link(`/certifications/${cert.id}`, `${cert.mark} for ${cert.product_name} (${cert.market_code})`)} is *${state === 'certified' ? 'certified' : 'rejected'}* (${n.esc(who)})`,

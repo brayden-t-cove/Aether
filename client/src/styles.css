@@ -906,6 +906,27 @@ label.inline {
   padding: 0.25rem 0;
   color: var(--text);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+/* The arrow that says a row opens; it turns down when the item is open. */
+.chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 160ms ease;
+}
+.item.is-open .chevron {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+.item-title:hover .chevron {
+  color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
 }
 .item-title:hover {
   color: var(--accent);
@@ -1514,7 +1535,7 @@ table.comparison .luna-col {
 
 .state-note,
 .item-latest {
-  margin: 0.25rem 0 0.25rem 10.25rem;
+  margin: 0.25rem 0 0.25rem calc(10.25rem + 1.3rem);
 }
 .state-note {
   display: flex;
@@ -1538,7 +1559,7 @@ table.comparison .luna-col {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  max-width: calc(100% - 10.25rem);
+  max-width: calc(100% - 11.55rem);
 }
 .item-latest:hover .item-latest-body {
   color: var(--accent);

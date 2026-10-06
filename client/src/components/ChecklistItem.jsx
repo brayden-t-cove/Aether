@@ -14,7 +14,6 @@ const toForm = (item) => ({
   owner_id: item.owner_id || '',
   due_date: item.due_date || '',
   evidence_url: item.evidence_url || '',
-  notes: item.notes || '',
 });
 
 function BlockerLink({ blocker, projectId }) {
@@ -108,8 +107,11 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
             <StateBadge state={item.state} waiting={item.waiting} />
           )}
         </div>
-        <button className="item-title" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          {item.title}
+        <button className="item-title" onClick={() => setOpen((o) => !o)} aria-expanded={open} title={open ? 'Hide details' : 'Show details and updates'}>
+          <svg className="chevron" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{item.title}</span>
         </button>
         <div className="item-meta">
           <span className={item.owner_name ? '' : 'muted'}>{item.owner_name || 'Unassigned'}</span>
@@ -193,10 +195,6 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
                 </span>
                 <input type="url" value={form.evidence_url} onChange={set('evidence_url')} placeholder="https://" />
               </label>
-              <label>
-                Notes
-                <textarea rows={3} value={form.notes} onChange={set('notes')} />
-              </label>
               <div className="row">
                 <button className="btn primary" disabled={busy}>
                   Save
@@ -210,9 +208,7 @@ export default function ChecklistItem({ item, projectId, allItems, users, stages
                 </button>
               </div>
             </form>
-          ) : (
-            item.notes && <p className="pre">{item.notes}</p>
-          )}
+          ) : null}
 
           <div className="deps">
             <div>

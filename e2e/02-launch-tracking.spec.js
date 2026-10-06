@@ -85,14 +85,21 @@ test("an item can't be done while it waits on something open; blocking one posts
   await setState('Full technical specs defined', 'done', 'Done');
   await expect(state('Full technical specs defined')).toHaveValue('done');
 
-  // Edit an item: owner, due date in the past (overdue), notes.
-  await row('Mold design').locator('.item-title').click();
+  // Open an item with its arrow and edit it: owner, due date in the past (overdue). Notes are dated updates, not a field.
+  const title = row('Mold design').getByRole('button', { name: 'Mold design' });
+  await expect(title).toHaveAttribute('aria-expanded', 'false');
+  await title.click();
+  await expect(title).toHaveAttribute('aria-expanded', 'true');
   const open = page.locator('li.item.is-open');
+  await expect(field(open, 'Notes', 'textarea')).toHaveCount(0);
+  await open.getByLabel('New update on Mold design').fill('Waiting on factory drawings');
+  await open.getByRole('button', { name: 'Post update' }).click();
+  await expect(open.locator('.update')).toContainText('Waiting on factory drawings');
   await field(open, 'Owner', 'select').selectOption({ label: 'Ella Editor' });
   await field(open, 'Due date').fill('2026-01-15');
-  await field(open, 'Notes', 'textarea').fill('Waiting on factory drawings');
   await open.getByRole('button', { name: 'Save' }).click();
   await expect(row('Mold design')).toContainText('Overdue');
+  await expect(row('Mold design').locator('.item-latest')).toContainText('“Waiting on factory drawings” — Ella Editor');
 
   const before = (await slackMessages(request)).length;
   await state('Integration discussion').selectOption('blocked');

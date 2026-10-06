@@ -30,7 +30,7 @@ describe.skipIf(!TEST_DATABASE_URL)('updates on checklist items', () => {
     other = await signedInAgent(app, db, { email: 'other@example.com', role: 'editor', name: 'Other' });
     viewer = await signedInAgent(app, db, { email: 'vi@example.com', role: 'viewer' });
     ({ body: { project } } = await editor.agent.post('/api/projects').send({ name: 'Sample launch' }).expect(201));
-    ({ body: { item } } = await editor.agent.post(`/api/projects/${project.id}/items`).send({ title: 'Lab booking', notes: 'Old notes' }).expect(201));
+    ({ body: { item } } = await editor.agent.post(`/api/projects/${project.id}/items`).send({ title: 'Lab booking' }).expect(201));
   });
   afterAll(async () => {
     await slack?.close();
@@ -100,8 +100,16 @@ describe.skipIf(!TEST_DATABASE_URL)('updates on checklist items', () => {
     expect(rows[0].excerpt).toBe('Lab has no slot until November');
   });
 
+  it('saves a first update written with a new item', async () => {
+    const { body } = await editor.agent.post(`/api/projects/${project.id}/items`).send({ title: 'Order adapters', comment: 'Need 200 type G adapters by November' }).expect(201);
+    expect(await comments(body.item.id)).toEqual([expect.objectContaining({ body: 'Need 200 type G adapters by November', state: 'not_started', state_from: null, author_name: 'Ed' })]);
+    const { body: plain } = await editor.agent.post(`/api/projects/${project.id}/items`).send({ title: 'No note' }).expect(201);
+    expect(await comments(plain.item.id)).toEqual([]);
+  });
+
   it('removes an item’s updates with the item', async () => {
+    expect((await db.query('SELECT count(*)::int AS n FROM item_comments WHERE item_id = $1', [item.id])).rows[0].n).toBeGreaterThan(0);
     await editor.agent.delete(`/api/items/${item.id}`).expect(200);
-    expect((await db.query('SELECT count(*)::int AS n FROM item_comments')).rows[0].n).toBe(0);
+    expect((await db.query('SELECT count(*)::int AS n FROM item_comments WHERE item_id = $1', [item.id])).rows[0].n).toBe(0);
   });
 });

@@ -204,7 +204,13 @@ export function projectRoutes({ db, files, notify }) {
     asyncHandler(async (req, res) => {
       const project = await loadProject(db, req.params.id);
       const fields = parse(req.body, ITEM_FIELDS, { required: ['title'] });
-      const item = await createItem(db, project.id, fields, req.user.id);
+      // An optional first update, written with the item.
+      const note = COMMENT_BODY(req.body?.comment);
+      const item = await withTransaction(db, async (tx) => {
+        const created = await createItem(tx, project.id, fields, req.user.id);
+        if (note) await addComment(tx, { item: created, body: note, userId: req.user.id });
+        return created;
+      });
       await logItem(db, item, 'item_added', { category: item.category }, req.user.id);
       res.status(201).json({ item });
     }),
