@@ -55,7 +55,7 @@ const ROWS = [
 
 describe.skipIf(!TEST_DATABASE_URL)('the Returns overview', () => {
   let db, editor, viewer;
-  const SEPT = 'from=2026-09-01&to=2026-09-30&match=all';
+  const SEPT = 'from=2026-09-01&to=2026-09-30';
   const summary = async (q = SEPT) => (await viewer.get(`/api/returns/summary?${q}`).expect(200)).body;
 
   beforeAll(async () => {
@@ -105,6 +105,31 @@ describe.skipIf(!TEST_DATABASE_URL)('the Returns overview', () => {
     expect(body.returns.map((r) => r.return_ref).sort()).toEqual(['OV-5', 'OV-6']);
     const { body: conn } = await viewer.get(`/api/returns?${SEPT}&bucket=connectivity`).expect(200);
     expect(conn.returns.map((r) => r.return_ref).sort()).toEqual(['OV-1', 'OV-3']);
+  });
+
+  it('opens a sub-reason to its returns, Other’s unfiled ones included', async () => {
+    const refs = async (q) => (await viewer.get(`/api/returns?${SEPT}&${q}`).expect(200)).body.returns.map((r) => r.return_ref).sort();
+    expect(await refs('bucket=connectivity&subreason=drops_offline')).toEqual(['OV-1']);
+    expect(await refs('bucket=connectivity&subreason=wont_connect')).toEqual(['OV-3']);
+    expect(await refs('bucket=non_specific&subreason=unfiled')).toEqual(['OV-5', 'OV-6']);
+    const [r] = (await viewer.get(`/api/returns?${SEPT}&bucket=connectivity&subreason=drops_offline`)).body.returns;
+    expect(r.category_why).toBe('note matched: "keeps going off"');
+  });
+
+  it('counts how much of each sub-reason a person has checked, and re-filing moves a return', async () => {
+    const sub = async (bucket, key) => (await summary()).bySubreason.find((s) => s.bucket === bucket && s.key === key);
+    expect(await sub('connectivity', 'drops_offline')).toMatchObject({ units: 1, checked_units: 0 });
+    const id = async (ref) => (await db.query('SELECT id FROM returns WHERE return_ref = $1', [ref])).rows[0].id;
+    // "Looks right": the same call, confirmed.
+    await editor.patch(`/api/returns/${await id('OV-1')}/category`).send({ category: 'connectivity', subreason: 'drops_offline' }).expect(200);
+    expect(await sub('connectivity', 'drops_offline')).toMatchObject({ units: 1, checked_units: 1 });
+    // Re-filed: "Would not connect" was really about the mount.
+    await editor.patch(`/api/returns/${await id('OV-3')}/category`).send({ category: 'fit', subreason: 'mount' }).expect(200);
+    expect(await sub('connectivity', 'wont_connect')).toBeUndefined();
+    expect(await sub('fit', 'mount')).toMatchObject({ units: 1, checked_units: 1 });
+    // The rules never change a call a person made.
+    await editor.post('/api/returns/sort').expect(200);
+    expect(await sub('fit', 'mount')).toMatchObject({ units: 1, checked_units: 1 });
   });
 
   it('lets editors change a bucket’s definition, and logs it', async () => {

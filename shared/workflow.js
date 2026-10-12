@@ -143,35 +143,6 @@ export const RETURN_FLAGS = {
   points_to_fault: 'Points to a camera fault',
 };
 
-/**
- * What's behind a return, from its sub-reason (return_subreasons.cause). "Points to a camera fault" moves an
- * unclear return into Product fault. Sub-reasons with no cause count as other reasons.
- */
-export const RETURN_CAUSES = {
-  fault: 'Product fault',
-  conditions: 'Conditions & compatibility',
-  unclear: 'Connectivity, cause unclear',
-  other: 'Other reasons',
-};
-
-/** How confidently the customer-match workbook tied a return to a real customer, strongest first. */
-export const MATCH_CONFIDENCE = {
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  unmatched: 'Unmatched',
-};
-
-/**
- * Which returns the Returns page counts. "strong" hides returns the workbook rated Low, or couldn't match because
- * the order wasn't found. Unmatched returns with no activation in the buyer's zip stay in (the camera never went
- * online), as do returns it says nothing about (all of Amazon, or TikTok before a workbook is uploaded).
- */
-export const MATCH_VIEWS = {
-  strong: 'Hide weak matches',
-  all: 'All returns',
-};
-
 /** Amazon customer-return reason codes → readable label and group. */
 export const AMAZON_REASONS = {
   DEFECTIVE: ['Defective / does not work', 'defect'],

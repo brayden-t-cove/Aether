@@ -31,31 +31,6 @@ function Chevron({ open }) {
   );
 }
 
-/** Why some unclear connectivity returns have no activation data: the workbook covers TikTok only, and only what it lists. */
-function activationRows(t) {
-  const known = t.unclear_online_units + t.unclear_never_units;
-  if (!t.unclear_units) return [];
-  const unknown = t.unclear_units - known;
-  const notTiktok = t.unclear_not_tiktok_units || 0;
-  const notListed = t.unclear_not_in_workbook_units || 0;
-  const weak = Math.max(0, unknown - notTiktok - notListed);
-  return [
-    { label: 'Went online, then failed', value: t.unclear_online_units, note: 'The buyer’s camera was activated, so it worked at least once' },
-    { label: 'Never went online', value: t.unclear_never_units, note: 'No camera was activated in the buyer’s zip, so it likely never got past setup' },
-    {
-      label: 'No activation data',
-      value: unknown,
-      note: [
-        notTiktok && `${notTiktok} from Amazon or other channels (the workbook covers TikTok only)`,
-        notListed && `${notListed} TikTok not in the match workbook yet`,
-        weak && `${weak} with a weak match or order not found`,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    },
-  ].filter((r) => r.value > 0);
-}
-
 /** Editing a bucket's definition (the definition itself shows in the bucket's row). */
 function Definition({ bucket, onSaved }) {
   const { can } = useAuth();
@@ -95,14 +70,153 @@ function Definition({ bucket, onSaved }) {
   ) : null;
 }
 
+/** The word the rules matched, from category_why ('note matched: "connect"'), marked in the note. */
+function Highlighted({ note, why }) {
+  const word = /note matched: "(.+)"/.exec(why || '')?.[1];
+  const at = word ? note.toLowerCase().indexOf(word.toLowerCase()) : -1;
+  if (at < 0) return <>{note}</>;
+  return (
+    <>
+      {note.slice(0, at)}
+      <mark className="matched">{note.slice(at, at + word.length)}</mark>
+      {note.slice(at + word.length)}
+    </>
+  );
+}
+
+/** One return in a sub-reason: its note with the matched word marked, and for editors, confirm or re-file. */
+function FiledReturn({ r, bucketKey, options, onChanged }) {
+  const { can } = useAuth();
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const checked = r.reviewed_at || r.category_source === 'manual';
+  const file = async (value) => {
+    const [category, subreason] = value.split('/');
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/returns/${r.id}/category`, { method: 'PATCH', body: { category, subreason } });
+      await onChanged();
+    } catch (err) {
+      setError(err);
+      setBusy(false);
+    }
+  };
+  return (
+    <li className={`note-item filed-return ${checked ? 'is-checked' : ''}`}>
+      <p className="note-text">
+        “<Highlighted note={r.note_clean} why={r.category_why} />”
+      </p>
+      <p className="muted small">
+        {formatDate(r.return_date)} · {CHANNELS[r.channel]}
+        {r.product_name && ` · ${r.product_name}`}
+        {r.reason && ` · Picked: ${r.reason}`}
+        {r.quantity > 1 && ` · ${r.quantity} units`}
+        {checked ? (
+          <span className="tag checked-tag">{r.category_source === 'manual' && r.category_why === '' ? 'Filed by hand' : 'Checked'}</span>
+        ) : (
+          r.category_why && <span className="muted"> · {r.category_why}</span>
+        )}
+      </p>
+      <ErrorNote error={error} />
+      {can('editor') && (
+        <div className="row filed-actions">
+          {!checked && r.category_key && (
+            <button className="btn small" onClick={() => file(`${r.category_key}/${r.subreason_key}`)} disabled={busy}>
+              Looks right
+            </button>
+          )}
+          <select value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} aria-label={`Re-file the return from ${formatDate(r.return_date)}`}>
+            <option value="">Re-file as…</option>
+            {options.map((c) => (
+              <optgroup key={c.key} label={c.name}>
+                {c.subreasons
+                  .filter((s) => !(c.key === bucketKey && s.key === r.subreason_key))
+                  .map((s) => (
+                    <option key={s.key} value={`${c.key}/${s.key}`}>
+                      {s.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+          <button className="btn small" onClick={() => file(to)} disabled={!to || busy}>
+            Re-file
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** A sub-reason's returns this month, unchecked first, so each call can be confirmed or corrected. */
+function SubreasonReturns({ bucketKey, subreason, query, options, onChanged }) {
+  const params = new URLSearchParams({ ...query, bucket: bucketKey, subreason, limit: '1000' });
+  const { data, error, reload } = useLoad(`/api/returns?${params}`);
+  const [all, setAll] = useState(false);
+  const changed = async () => {
+    await reload();
+    await onChanged();
+  };
+  if (error) return <ErrorNote error={error} />;
+  if (!data) return <p className="muted small">Loading…</p>;
+  const isChecked = (r) => r.reviewed_at || r.category_source === 'manual';
+  const list = [...data.returns].sort((a, b) => Number(Boolean(isChecked(a))) - Number(Boolean(isChecked(b))));
+  return (
+    <div className="subreason-returns">
+      <ul className="note-list">
+        {(all ? list : list.slice(0, 15)).map((r) => (
+          <FiledReturn key={r.id} r={r} bucketKey={bucketKey} options={options} onChanged={changed} />
+        ))}
+      </ul>
+      {!all && list.length > 15 && (
+        <button className="link-btn small" onClick={() => setAll(true)}>
+          Show all {list.length}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** A bucket's sub-reasons with their units and how many are checked; each opens to its returns. */
+function SubreasonList({ bucket, query, options, onChanged }) {
+  const [open, setOpen] = useState(null);
+  const subs = bucket.subreasons.filter((s) => s.units);
+  if (!subs.length) return <p className="muted small">No returns in this bucket this month.</p>;
+  const max = Math.max(...subs.map((s) => s.units));
+  return (
+    <ul className="subreason-list" aria-label={`${bucket.name} by sub-reason`}>
+      {subs.map((s) => {
+        const isOpen = open === s.key;
+        return (
+          <li key={s.key} className={isOpen ? 'is-open' : ''}>
+            <button className="subreason-head" onClick={() => setOpen(isOpen ? null : s.key)} aria-expanded={isOpen}>
+              <Chevron open={isOpen} />
+              <span className="subreason-name">{s.name}</span>
+              <span className="hbar-track">
+                <span className="hbar-fill" style={{ width: `${(s.units / max) * 100}%`, background: `var(${bucket.color})` }} />
+              </span>
+              <span className="subreason-value">{s.units}</span>
+              <span className={`subreason-checked small ${s.checked_units >= s.units ? 'all-checked' : ''}`}>
+                {s.checked_units} of {s.units} checked
+              </span>
+            </button>
+            {isOpen && <SubreasonReturns bucketKey={bucket.key} subreason={s.key} query={query} options={options} onChanged={onChanged} />}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** The key: each bucket with its definition, units and share; opening one shows its sub-reasons. */
-function BucketKey({ buckets, totals, onSaved }) {
+function BucketKey({ buckets, totals, onSaved, query, options, onChanged }) {
   const [open, setOpen] = useState(null);
   return (
     <ul className="bucket-key">
       {buckets.map((b) => {
         const isOpen = open === b.key;
-        const activation = b.key === 'connectivity' ? activationRows(totals) : [];
         return (
           <li key={b.key} className={`bucket ${isOpen ? 'is-open' : ''}`}>
             <button className="bucket-head" onClick={() => setOpen(isOpen ? null : b.key)} aria-expanded={isOpen}>
@@ -119,17 +233,7 @@ function BucketKey({ buckets, totals, onSaved }) {
             {isOpen && (
               <div className="bucket-body">
                 <Definition bucket={b} onSaved={onSaved} />
-                {b.subreasons.some((s) => s.units) ? (
-                  <HBars ariaLabel={`${b.name} by sub-reason`} color={b.color} data={b.subreasons.filter((s) => s.units).map((s) => ({ label: s.name, value: s.units }))} />
-                ) : (
-                  <p className="muted small">No returns in this bucket this month.</p>
-                )}
-                {activation.length > 0 && (
-                  <>
-                    <h4>Where the note doesn’t say why it won’t connect ({units(totals.unclear_units)})</h4>
-                    <HBars ariaLabel="Unclear connectivity by activation" color={b.color} data={activation} />
-                  </>
-                )}
+                <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />
               </div>
             )}
           </li>
@@ -384,16 +488,19 @@ function OtherSection({ query }) {
   );
 }
 
-export default function ReturnsOverview({ data, codebook, query, monthName, onCodebookChanged }) {
+export default function ReturnsOverview({ data, codebook, query, monthName, onCodebookChanged, onReturnsChanged }) {
   const [showTable, setShowTable] = useState(false);
   const t = data.totals;
   const buckets = BUCKETS.map((b) => {
     const c = codebook.find((x) => x.key === b.key) || { name: b.key, description: '', subreasons: [] };
     const subs = data.bySubreason.filter((s) => s.bucket === b.key);
-    const subreasons = c.subreasons.map((s) => ({ ...s, units: subs.find((x) => x.key === s.key)?.units || 0 }));
+    const subreasons = c.subreasons.map((s) => {
+      const row = subs.find((x) => x.key === s.key);
+      return { ...s, units: row?.units || 0, checked_units: row?.checked_units || 0 };
+    });
     // Other also holds notes nobody has filed yet.
     const unfiled = subs.filter((s) => !s.key).reduce((n, s) => n + s.units, 0);
-    if (unfiled) subreasons.push({ key: 'unfiled', name: 'Not filed yet', units: unfiled });
+    if (unfiled) subreasons.push({ key: 'unfiled', name: 'Not filed yet', units: unfiled, checked_units: 0 });
     return { ...b, name: c.name, description: c.description, subreasons, units: subs.reduce((n, s) => n + s.units, 0) };
   });
   const noComment = codebook.find((c) => c.key === 'no_comment');
@@ -475,7 +582,14 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
           they picked on the platform) are matched against each bucket’s keywords, in a fixed order when a note fits more than one. Notes the rules can’t
           place go to Other until someone files them, and anyone can file or correct a return on the Review page. Open a bucket for its sub-reasons.
         </p>
-        <BucketKey buckets={buckets} totals={t} onSaved={onCodebookChanged} />
+        <BucketKey
+          buckets={buckets}
+          totals={t}
+          onSaved={onCodebookChanged}
+          query={query}
+          options={codebook.filter((c) => c.in_share || c.key === 'no_comment')}
+          onChanged={onReturnsChanged}
+        />
       </section>
 
       <section className="card">

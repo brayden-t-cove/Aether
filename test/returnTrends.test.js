@@ -7,7 +7,7 @@ const WEEKS = [
   { week: '2026-09-21', end: '2026-09-27', partial: false },
   { week: '2026-09-28', end: '2026-10-04', partial: true },
 ];
-const row = (o) => ({ channel: 'tiktok', product_id: 'p1', product_name: 'Sample Cam', category_key: 'connectivity', category_name: 'Connectivity', cause: 'unclear', blank: false, returns: 1, units: 1, ...o });
+const row = (o) => ({ channel: 'tiktok', product_id: 'p1', product_name: 'Sample Cam', category_key: 'connectivity', category_name: 'Connectivity', reasoned: true, blank: false, returns: 1, units: 1, ...o });
 
 describe('adding up weekly returns', () => {
   const data = {
@@ -15,8 +15,8 @@ describe('adding up weekly returns', () => {
     rows: [
       row({ week: '2026-09-14', units: 2, returns: 2 }),
       row({ week: '2026-09-21', units: 6, returns: 5 }),
-      row({ week: '2026-09-21', category_key: 'fit', category_name: 'Fit & Installation', cause: 'conditions', channel: 'amazon' }),
-      row({ week: '2026-09-21', category_key: 'no_comment', category_name: 'No Comment', cause: null, blank: true, returns: 3, units: 3 }),
+      row({ week: '2026-09-21', category_key: 'fit', category_name: 'Fit & Installation', channel: 'amazon' }),
+      row({ week: '2026-09-21', category_key: 'no_comment', category_name: 'No Comment', reasoned: false, blank: true, returns: 3, units: 3 }),
       row({ week: '2026-09-28', units: 9, returns: 9 }), // this week so far: never compared
     ],
   };
@@ -34,14 +34,10 @@ describe('adding up weekly returns', () => {
     expect(change(5, 1)).toMatchObject({ delta: -4, pct: -80, rising: false });
   });
 
-  it('groups returns with a reason by category or cause, leaving out No Comment', () => {
+  it('groups returns with a reason by bucket, leaving out No Comment', () => {
     expect(weeklyGroups(data).map((g) => [g.key, g.prev, g.last, g.rising])).toEqual([
       ['connectivity', 2, 6, true],
       ['fit', 0, 1, false],
-    ]);
-    expect(weeklyGroups(data, 'cause').map((g) => [g.key, g.label, g.last])).toEqual([
-      ['conditions', 'Conditions & compatibility', 1],
-      ['unclear', 'Connectivity, cause unclear', 6],
     ]);
   });
 
@@ -55,7 +51,7 @@ describe('adding up weekly returns', () => {
 
   it('sums a channel and splits products', () => {
     const tiktok = channelFigures(data.rows.filter((r) => r.channel === 'tiktok'));
-    expect(tiktok).toMatchObject({ units: 20, returns: 19, shareUnits: 17, blank: 3, causes: { unclear: 17, fault: 0 } });
+    expect(tiktok).toMatchObject({ units: 20, returns: 19, shareUnits: 17, blank: 3 });
     expect(tiktok.categories).toEqual({ connectivity: { label: 'Connectivity', units: 17 } });
     expect(productBreakdown(data.rows)).toEqual([
       { key: 'p1', productId: 'p1', name: 'Sample Cam', units: 21, returns: 20, blank: 3, byChannel: { tiktok: 20, amazon: 1 } },
@@ -118,15 +114,15 @@ describe.skipIf(!TEST_DATABASE_URL)('the weekly returns API', () => {
     expect(body.weeks.at(-1).week <= today && today <= body.weeks.at(-1).end).toBe(true);
   });
 
-  it('puts each return in its week, with its cause and whether it has a note, leaving out samples', async () => {
+  it('puts each return in its week, with whether it has a reason and a note, leaving out samples', async () => {
     const { rows } = await weekly('weeks=3&end=2026-10-02');
-    const pick = (r) => [r.week, r.category_key, r.cause, r.blank, r.units];
+    const pick = (r) => [r.week, r.category_key, r.reasoned, r.blank, r.units];
     expect(rows.map(pick).sort()).toEqual(
       [
-        ['2026-09-14', 'connectivity', 'unclear', false, 1],
-        ['2026-09-21', 'connectivity', 'unclear', false, 1],
-        ['2026-09-21', 'no_comment', null, true, 1],
-        ['2026-09-28', 'fit', 'conditions', false, 1],
+        ['2026-09-14', 'connectivity', true, false, 1],
+        ['2026-09-21', 'connectivity', true, false, 1],
+        ['2026-09-21', 'no_comment', false, true, 1],
+        ['2026-09-28', 'fit', true, false, 1],
       ].sort(),
     );
   });

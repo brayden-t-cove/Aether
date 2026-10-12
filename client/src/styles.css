@@ -2159,6 +2159,78 @@ table.comparison .luna-col {
   max-width: 12rem;
 }
 
+/* Sub-reasons that open to their returns, to confirm or re-file each call. */
+.subreason-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.subreason-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(10rem, 1.3fr) minmax(6rem, 2fr) 2.5rem 8.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.25rem;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+}
+.subreason-head:hover {
+  background: var(--surface-2);
+}
+.subreason-value {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.subreason-checked {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.subreason-checked.all-checked {
+  color: var(--status-good);
+}
+.subreason-returns {
+  margin: 0.4rem 0 0.9rem 1.6rem;
+  animation: update-in 0.2s var(--ease-out);
+}
+mark.matched {
+  background: var(--note-bg);
+  color: var(--note-ink);
+  border-radius: 3px;
+  padding: 0 0.15em;
+}
+.filed-return.is-checked {
+  border-left-color: var(--status-good);
+}
+.checked-tag {
+  margin-left: 0.5rem;
+  border-color: var(--status-good);
+}
+.filed-actions {
+  margin-top: 0.3rem;
+}
+.filed-actions select {
+  max-width: 16rem;
+}
+@media (max-width: 800px) {
+  .subreason-head {
+    grid-template-columns: auto 1fr 2.5rem;
+  }
+  .subreason-head .hbar-track {
+    display: none;
+  }
+  .subreason-checked {
+    grid-column: 2 / -1;
+  }
+}
+
 /* A buyer's note in the import preview: a few lines, the rest on hover. */
 .import-note {
   max-width: 22rem;

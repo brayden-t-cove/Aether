@@ -1,10 +1,8 @@
 /**
  * Adding up /api/returns/weekly rows for the Returns page's dashboard views. Each row is one week × channel ×
- * product × category × cause × blank note, with `returns` (count) and `units` (quantity).
+ * product × category × blank note, with `reasoned` (in a bucket), `returns` (count) and `units` (quantity).
  * Kept free of React so it can be unit-tested.
  */
-import { RETURN_CAUSES } from '../../../shared/workflow.js';
-
 const sum = (rows, key = 'units') => rows.reduce((n, r) => n + r[key], 0);
 
 /** The last two weeks that have finished, oldest first: [previous, last]. Either may be undefined. */
@@ -22,25 +20,22 @@ export function change(prev, last) {
 }
 
 /**
- * Units per week for each group with a reason (category or cause), with last week compared to the one before.
- * by: 'category' | 'cause'. → [{ key, label, perWeek: { week: units }, total, ...change }] busiest last week first.
+ * Units per week for each bucket, with last week compared to the one before.
+ * → [{ key, label, perWeek: { week: units }, total, ...change }] busiest last week first.
  */
-export function weeklyGroups(data, by = 'category') {
+export function weeklyGroups(data) {
   const [prev, last] = lastTwoComplete(data.weeks);
   const groups = new Map();
   for (const r of data.rows) {
-    if (!r.cause) continue; // No Comment and unsorted returns have no reason to compare
-    const key = by === 'cause' ? r.cause : r.category_key;
-    const label = by === 'cause' ? RETURN_CAUSES[r.cause] : r.category_name;
-    if (!groups.has(key)) groups.set(key, { key, label, perWeek: {}, total: 0 });
-    const g = groups.get(key);
+    if (!r.reasoned) continue; // No Comment and unsorted returns have no reason to compare
+    if (!groups.has(r.category_key)) groups.set(r.category_key, { key: r.category_key, label: r.category_name, perWeek: {}, total: 0 });
+    const g = groups.get(r.category_key);
     g.perWeek[r.week] = (g.perWeek[r.week] || 0) + r.units;
     g.total += r.units;
   }
-  const order = by === 'cause' ? Object.keys(RETURN_CAUSES) : null;
   return [...groups.values()]
     .map((g) => ({ ...g, ...change(prev ? g.perWeek[prev.week] || 0 : 0, last ? g.perWeek[last.week] || 0 : 0) }))
-    .sort((a, b) => (order ? order.indexOf(a.key) - order.indexOf(b.key) : b.last - a.last || b.total - a.total || a.label.localeCompare(b.label)));
+    .sort((a, b) => b.last - a.last || b.total - a.total || a.label.localeCompare(b.label));
 }
 
 /** Per week: { week, units, returns, blank (returns with no note), byChannel: { channel: units }, blankByChannel }. */
@@ -57,16 +52,12 @@ export function weekTotals(data) {
   });
 }
 
-/**
- * One channel's figures over the whole period: units, returns, units with a reason, each cause's units,
- * returns with no note, and units per category.
- */
+/** One channel's figures over the whole period: units, returns, units with a reason, returns with no note, and units per bucket. */
 export function channelFigures(rows) {
-  const reasoned = rows.filter((r) => r.cause);
-  const causes = Object.fromEntries(Object.keys(RETURN_CAUSES).map((k) => [k, sum(reasoned.filter((r) => r.cause === k))]));
+  const reasoned = rows.filter((r) => r.reasoned);
   const categories = {};
   for (const r of reasoned) categories[r.category_key] = { label: r.category_name, units: (categories[r.category_key]?.units || 0) + r.units };
-  return { units: sum(rows), returns: sum(rows, 'returns'), shareUnits: sum(reasoned), causes, blank: sum(rows.filter((r) => r.blank), 'returns'), categories };
+  return { units: sum(rows), returns: sum(rows, 'returns'), shareUnits: sum(reasoned), blank: sum(rows.filter((r) => r.blank), 'returns'), categories };
 }
 
 /** Per product: units per channel, returns, and returns with no note. Busiest first. */

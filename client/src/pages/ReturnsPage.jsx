@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CHANNELS, MATCH_VIEWS } from '../../../shared/workflow.js';
+import { CHANNELS } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
@@ -83,8 +83,7 @@ export default function ReturnsPage() {
   const channel = view === 'channels' ? '' : params.get('channel') || '';
   // The overview opens each product in place instead of filtering the page by one.
   const productId = view === 'overview' ? '' : params.get('productId') || '';
-  const match = params.get('match') || 'strong';
-  const filters = { match, ...(channel && { channel }), ...(productId && { productId }) };
+  const filters = { ...(channel && { channel }), ...(productId && { productId }) };
   const monthQuery = { ...filters, from: `${month}-01`, to: lastDay(month) };
   const { data, error, reload } = useLoad(
     view === 'overview' ? `/api/returns/summary?${new URLSearchParams({ ...monthQuery, trendFrom: `${shiftMonth(month, -11)}-01` })}` : null,
@@ -186,25 +185,9 @@ export default function ReturnsPage() {
               <ProductSelect value={productId} onChange={(id) => setFilter('productId', id)} emptyLabel="All" />
             </label>
           )}
-          <label className="inline">
-            Customer match
-            <select value={match} onChange={(e) => setFilter('match', e.target.value === 'strong' ? '' : e.target.value)}>
-              {Object.entries(MATCH_VIEWS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
       </div>
 
-      {match === 'strong' && (
-        <p className="muted small">
-          Leaving out TikTok returns the customer-match workbook rated Low, or couldn't match because the order wasn't found. Returns where no
-          camera went online in the buyer's zip are kept, as are returns it has no rating for, including all of Amazon.
-        </p>
-      )}
       {view !== 'overview' && (
         <>
           <ErrorNote error={weekly.error} />
@@ -240,7 +223,7 @@ export default function ReturnsPage() {
         </div>
       ) : (
         <>
-          <ReturnsOverview data={data} codebook={codebook.data.categories} query={monthQuery} monthName={monthName(month)} onCodebookChanged={codebook.reload} />
+          <ReturnsOverview data={data} codebook={codebook.data.categories} query={monthQuery} monthName={monthName(month)} onCodebookChanged={codebook.reload} onReturnsChanged={reload} />
         </>
       )}
 
