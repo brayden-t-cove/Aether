@@ -78,6 +78,26 @@ test('a product added by hand and its Odyssey copy are suggested as duplicates a
   await expect(page.getByRole('link', { name: 'Legacy Sensor', exact: true })).toBeVisible();
 });
 
+test('a duplicate the suggestions miss is merged from the product page', async ({ page }) => {
+  await login(page, 'editor');
+  await nav(page, 'Products');
+  await page.getByRole('button', { name: 'Add product' }).click();
+  await field(page, 'Name').fill('Spare basement unit');
+  await page.getByRole('button', { name: 'Add product' }).click();
+  await expect(page.getByRole('heading', { name: 'Spare basement unit' })).toBeVisible();
+
+  await page.goto('/products');
+  await page.getByRole('link', { name: 'Legacy Sensor', exact: true }).click();
+  await page.getByRole('button', { name: 'Merge a duplicate into this product' }).click();
+  const form = page.getByRole('form', { name: 'Merge a duplicate into this product' });
+  await form.getByLabel('Duplicate to merge in').selectOption({ label: 'Spare basement unit' });
+  await form.getByRole('button', { name: 'Merge', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(page.locator('dl.details')).toContainText('Spare basement unit');
+  await page.goto('/products');
+  await expect(page.getByRole('link', { name: 'Spare basement unit', exact: true })).toHaveCount(0);
+});
+
 test('vendors: synced ones are read-only; the team adds a lab with a contact and product', async ({ page }) => {
   await login(page, 'editor');
   await nav(page, 'Vendors');

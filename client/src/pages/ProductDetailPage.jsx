@@ -12,6 +12,7 @@ import ProductPhase2 from '../components/ProductPhase2.jsx';
 import OdysseyBadge from '../components/OdysseyBadge.jsx';
 import TestSessions from '../components/TestSessions.jsx';
 import ProductListings from '../components/ProductListings.jsx';
+import MergeDuplicate from '../components/MergeDuplicate.jsx';
 import { VENDOR_TYPES } from '../../../shared/workflow.js';
 
 export default function ProductDetailPage() {
@@ -184,6 +185,12 @@ export default function ProductDetailPage() {
       <ProductPhase2 key={product.updated_at} product={product} editable={editable} />
       <ProductListings productId={product.id} editable={editable} />
       <TestSessions productId={product.id} />
+
+      {editable && (
+        <div className="merge-zone">
+          <MergeDuplicate product={product} onMerged={reload} />
+        </div>
+      )}
 
       {can('admin') && (
         <div className="danger-zone">

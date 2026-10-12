@@ -47,6 +47,9 @@ const modelTaken = (products, model, exceptId) => products.some((p) => p.id !== 
 async function syncProducts(tx, items, stats) {
   const { rows: existing } = await tx.query('SELECT id, name, model, manufacturer, source, odyssey_id FROM products');
   const byOdysseyId = new Map(existing.filter((p) => p.odyssey_id).map((p) => [p.odyssey_id, p]));
+  // Odyssey entries merged into another product: their test sessions go to it, and nothing else is copied.
+  const { rows: extra } = await tx.query('SELECT odyssey_id, product_id FROM product_odyssey_ids');
+  const mergedInto = new Map(extra.map((e) => [e.odyssey_id, e.product_id]));
   const idMap = new Map(); // Odyssey product ID → Aether product ID
 
   for (const o of items) {
@@ -60,6 +63,10 @@ async function syncProducts(tx, items, stats) {
       lifecycle: lifecycleFrom(o.status || o.specs?.productStatus),
     };
 
+    if (mergedInto.has(odysseyId)) {
+      idMap.set(odysseyId, mergedInto.get(odysseyId));
+      continue;
+    }
     let product = byOdysseyId.get(odysseyId);
     if (!product) {
       const keys = odysseyKeys(o);
