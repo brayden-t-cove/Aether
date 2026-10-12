@@ -31,6 +31,16 @@ test('an editor confirms a call the rules made', async ({ page }) => {
   await row.getByRole('button', { name: 'Confirm' }).click();
   await expect(page.getByText('Every call the rules made has been reviewed.')).toBeVisible();
   await expect(page.getByLabel('Review progress')).toContainText('1 of 1 returns with a note reviewed (100%)');
+
+  // On the Returns page, that sub-reason now counts as checked; a call can also be re-filed from there.
+  await page.goto('/returns?month=2026-07');
+  await page.getByRole('button', { name: /^Performance \/ Hardware/ }).click();
+  const subs = page.getByRole('list', { name: 'Performance / Hardware by sub-reason' });
+  await expect(subs).toContainText('1 of 1 checked');
+  await subs.getByRole('button', { name: /Works briefly then dies/ }).click();
+  await expect(subs.locator('.filed-return')).toContainText('Checked');
+  await expect(subs.getByRole('button', { name: 'Looks right' })).toHaveCount(0);
+  await expect(subs.getByLabel(/^Re-file the return/)).toBeVisible();
 });
 
 test('a note the rules don’t recognise lands on the Other page and is filed by hand', async ({ page }) => {

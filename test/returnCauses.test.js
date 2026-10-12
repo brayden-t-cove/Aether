@@ -23,7 +23,7 @@ describe('the "points to a camera fault" flag', () => {
   });
 });
 
-describe.skipIf(!TEST_DATABASE_URL)('what’s behind the returns', () => {
+describe.skipIf(!TEST_DATABASE_URL)('sub-reason causes and the camera-fault flag', () => {
   let db, editor, viewer;
   // Made-up TikTok returns, one per kind of cause.
   const tiktok = (n, note, o = {}) => ({
@@ -47,7 +47,6 @@ describe.skipIf(!TEST_DATABASE_URL)('what’s behind the returns', () => {
     tiktok(7, '', { 'Return Reason': 'Congrats on meeting your refundable sample criteria!', 'Return Quantity': '2' }), // set aside
   ];
   const totals = async () => (await viewer.get('/api/returns/summary').expect(200)).body;
-  const idOf = async (n) => (await db.query('SELECT id FROM returns WHERE return_ref = $1', [`42000000000000000${n}`])).rows[0].id;
 
   beforeAll(async () => {
     db = await setupDb();
@@ -74,23 +73,9 @@ describe.skipIf(!TEST_DATABASE_URL)('what’s behind the returns', () => {
     ]);
   });
 
-  it('splits returns with a reason into fault, conditions, unclear and other, and lists what was set aside', async () => {
+  it('counts returns with a reason and lists what was set aside', async () => {
     const body = await totals();
-    expect(body.totals).toMatchObject({ units: 6, share_units: 6, fault_units: 2, conditions_units: 2, unclear_units: 1, other_cause_units: 1, set_aside_units: 2 });
+    expect(body.totals).toMatchObject({ units: 6, share_units: 6, set_aside_units: 2 });
     expect(body.setAside).toEqual([{ category_key: 'sample', key: 'refundable_sample', name: 'Refundable sample', units: 2 }]);
-  });
-
-  it('moves a return between unclear and fault when a person changes the flag', async () => {
-    await editor.put(`/api/returns/${await idOf(3)}/flags/points_to_fault`).send({ on: false }).expect(200);
-    await editor.put(`/api/returns/${await idOf(2)}/flags/points_to_fault`).send({ on: true }).expect(200);
-    await editor.post('/api/returns/sort').expect(200); // re-sorting keeps both calls
-    expect((await totals()).totals).toMatchObject({ fault_units: 2, unclear_units: 1 });
-    await editor.put(`/api/returns/${await idOf(2)}/flags/points_to_fault`).send({ on: false }).expect(200);
-    expect((await totals()).totals).toMatchObject({ fault_units: 1, unclear_units: 2 });
-  });
-
-  it('only lets the flag move unclear returns, not ones already put down to conditions', async () => {
-    await editor.put(`/api/returns/${await idOf(4)}/flags/points_to_fault`).send({ on: true }).expect(200);
-    expect((await totals()).totals).toMatchObject({ fault_units: 1, conditions_units: 2 });
   });
 });

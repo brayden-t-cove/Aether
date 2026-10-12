@@ -63,9 +63,8 @@ function Coverage({ data }) {
 }
 
 export function WeekOverWeek({ data }) {
-  const [by, setBy] = useState('category');
   const [showAll, setShowAll] = useState(false);
-  const groups = weeklyGroups(data, by);
+  const groups = weeklyGroups(data);
   const [prev, last] = lastTwoComplete(data.weeks);
   const totals = weekTotals(data);
   const sumWeek = (w) => groups.reduce((n, g) => n + (w ? g.perWeek[w.week] || 0 : 0), 0);
@@ -75,26 +74,16 @@ export function WeekOverWeek({ data }) {
       <section className="card">
         <div className="row between">
           <h2>Week over week</h2>
-          <div className="tabs" role="tablist" aria-label="Compare by">
-            {[
-              ['category', 'Categories'],
-              ['cause', 'Causes'],
-            ].map(([k, label]) => (
-              <button key={k} role="tab" aria-selected={by === k} className={`tab ${by === k ? 'active' : ''}`} onClick={() => setBy(k)}>
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
         <Coverage data={data} />
         {!groups.length ? (
           <p className="muted">No returns with a reason in these weeks.</p>
         ) : (
           <div className="table-wrap">
-            <table aria-label={`Units by ${by} per week`}>
+            <table aria-label="Units by bucket per week">
               <thead>
                 <tr>
-                  <th>{by === 'cause' ? 'Cause' : 'Category'}</th>
+                  <th>Bucket</th>
                   <th className="num">{prev ? weekLabel(prev) : '—'}</th>
                   <th className="num">{last ? weekLabel(last) : '—'}</th>
                   <th className="num">Change</th>
@@ -174,10 +163,6 @@ export function ChannelsView({ data }) {
   const rows = [
     ['Units returned', (f) => f.units],
     ['Returns', (f) => f.returns],
-    ['Product fault', (f) => `${pct(f.causes.fault, f.shareUnits)}%`],
-    ['Conditions & compatibility', (f) => `${pct(f.causes.conditions, f.shareUnits)}%`],
-    ['Connectivity, cause unclear', (f) => `${pct(f.causes.unclear, f.shareUnits)}%`],
-    ['Other reasons', (f) => `${pct(f.causes.other, f.shareUnits)}%`],
     ['Returns with no note', (f) => `${pct(f.blank, f.returns)}%`],
   ];
 
@@ -186,7 +171,7 @@ export function ChannelsView({ data }) {
       <section className="card flush">
         <h2 className="pad-h">Amazon vs TikTok</h2>
         <p className="muted small pad-h">
-          {weekLabel(data.weeks[0])} to {weekLabel(data.weeks.at(-1))}. Causes are shares of units with a reason; the last row is a share of returns.
+          {weekLabel(data.weeks[0])} to {weekLabel(data.weeks.at(-1))}. Returns with no note is a share of returns.
         </p>
         <div className="table-wrap">
           <table aria-label="Amazon and TikTok compared">

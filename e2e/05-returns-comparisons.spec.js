@@ -74,7 +74,12 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   const bucket = page.getByRole('button', { name: /^Performance \/ Hardware/ });
   await expect(bucket).toContainText("The camera connects but doesn't do its job");
   await bucket.click();
-  await expect(page.getByRole('list', { name: 'Performance / Hardware by sub-reason' })).toContainText('Works briefly then dies');
+  const subs = page.getByRole('list', { name: 'Performance / Hardware by sub-reason' });
+  await expect(subs).toContainText('Works briefly then dies');
+  await expect(subs).toContainText('0 of 1 checked');
+  // A sub-reason opens to its returns, with the word the rules matched marked.
+  await subs.getByRole('button', { name: /Works briefly then dies/ }).click();
+  await expect(subs.locator('mark.matched')).toHaveText('Stopped working');
 
   const vs = page.getByRole('table', { name: "Platform reason against the buyer's note" });
   await expect(vs.locator('tr', { hasText: 'Defective / does not work' })).toContainText('100%');
