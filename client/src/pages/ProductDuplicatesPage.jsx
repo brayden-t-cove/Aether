@@ -45,8 +45,21 @@ function Side({ product, heading }) {
   );
 }
 
+const origin = (p) => (p.source === 'odyssey' ? 'Synced from Odyssey' : p.odyssey_id ? 'Aether, linked to Odyssey' : 'Added in Aether');
+
+/** What a merge does, in a sentence, for each kind of pair. */
+function mergeNote(keep, merge) {
+  if (keep.odyssey_id && merge.odyssey_id)
+    return `Odyssey lists this product twice. Merging keeps ${keep.name} and its details, and files both Odyssey entries (and their test results) under it from now on. You may also want to remove the extra entry in Odyssey.`;
+  if (merge.odyssey_id)
+    return `Merging keeps the name ${keep.name} and everything entered here, takes Odyssey's link${merge.model ? `, model number ${merge.model}` : ''} and manufacturer, and moves everything on ${merge.name} across.`;
+  return `Merging keeps ${keep.name} and its details, fills in anything it's missing from ${merge.name}, and moves everything on ${merge.name} across.`;
+}
+
 function Pair({ pair, editable, onDone }) {
-  const { keep, merge } = pair;
+  // When both are the same kind, either could be kept.
+  const [swapped, setSwapped] = useState(false);
+  const [keep, merge] = swapped ? [pair.merge, pair.keep] : [pair.keep, pair.merge];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -69,7 +82,6 @@ function Pair({ pair, editable, onDone }) {
       text: `${keep.name} and ${merge.name} won't be suggested again.`,
     });
 
-  const model = merge.model || keep.model;
   return (
     <li className="card dup-pair" aria-label={`${keep.name} and ${merge.name}`}>
       <div className="row">
@@ -83,15 +95,14 @@ function Pair({ pair, editable, onDone }) {
         ))}
       </ul>
       <div className="dup-sides">
-        <Side product={keep} heading="Added in Aether — kept" />
+        <Side product={keep} heading={`${origin(keep)} — kept`} />
         <span className="dup-arrow" aria-hidden="true">
           ←
         </span>
-        <Side product={merge} heading="Synced from Odyssey — merged in" />
+        <Side product={merge} heading={`${origin(merge)} — merged in`} />
       </div>
       <p className="muted small">
-        Merging keeps the name <strong>{keep.name}</strong> and everything entered here, takes Odyssey's link
-        {model ? <>, model number {model}</> : null} and manufacturer, and moves everything on {merge.name} across. {merge.name} stays searchable as another name.
+        {mergeNote(keep, merge)} {merge.name} stays searchable as another name.
       </p>
       <ErrorNote error={error} />
       {editable && (
@@ -99,6 +110,11 @@ function Pair({ pair, editable, onDone }) {
           <button className="btn primary" onClick={doMerge} disabled={busy}>
             Merge into {keep.name}
           </button>
+          {pair.swappable && (
+            <button className="btn ghost" onClick={() => setSwapped(!swapped)} disabled={busy}>
+              Keep {merge.name} instead
+            </button>
+          )}
           <button className="btn ghost" onClick={dismiss} disabled={busy}>
             Not the same
           </button>
@@ -125,8 +141,9 @@ export default function ProductDuplicatesPage() {
       <header className="page-header">
         <h1>Possible duplicates</h1>
         <p className="muted">
-          Products added in Aether that look like a product synced from Odyssey. Merging makes them one product, linked to Odyssey, so the next sync updates it
-          instead of adding the copy again.
+          Products that look like the same thing: one added in Aether and a copy synced from Odyssey, two added in Aether, or Odyssey listing the same
+          product twice. Merging makes them one product, so the next sync updates it instead of adding the copy again. For a duplicate not listed here,
+          open the product and use “Merge a duplicate into this product”.
         </p>
       </header>
       {done && (

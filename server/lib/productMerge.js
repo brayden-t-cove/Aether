@@ -1,10 +1,11 @@
 /**
- * Duplicate products: an Aether product added by hand and a copy synced from Odyssey that sync couldn't match,
- * because the name or model number differs a little ("Ro3v3" vs "JSRo3v3", "AB123" + "(V2)" vs "AB123 V2").
+ * Duplicate products: most often an Aether product added by hand and a copy synced from Odyssey that sync couldn't
+ * match, because the name or model number differs a little ("Ro3v3" vs "JSRo3v3", "AB123" + "(V2)" vs "AB123 V2");
+ * also two products added by hand, or Odyssey listing the same product twice.
  *
- * suggestDuplicates() scores every such pair and explains why it looks alike; nothing is merged without a person
+ * suggestDuplicates() scores every pair and explains why it looks alike; nothing is merged without a person
  * confirming. mergeProducts() folds one product into another: everything that belonged to either ends up on the
- * kept product, which takes the Odyssey link so later syncs update it instead of re-creating the copy.
+ * kept product, which takes the Odyssey link(s) so later syncs update it instead of re-creating the copy.
  */
 import { logActivity } from './activity.js';
 import { HttpError } from './http.js';
@@ -24,7 +25,7 @@ export const MOVED_TABLES = [
 /** Tables keyed by (product, something): rows are copied over unless the kept product already has them. */
 export const MERGED_SET_TABLES = { product_markets: 'market_id', vendor_products: 'vendor_id, role' };
 /** Tables handled on their own: aliases are re-created, dismissed pairs go with the removed product. */
-export const OTHER_PRODUCT_TABLES = ['products', 'product_aliases', 'product_distinct_pairs'];
+export const OTHER_PRODUCT_TABLES = ['products', 'product_aliases', 'product_distinct_pairs', 'product_odyssey_ids'];
 
 /** Below this score a pair isn't shown. */
 export const MIN_SCORE = 50;
@@ -150,9 +151,23 @@ const PRODUCT_COLUMNS = `p.id, p.name, p.model, p.manufacturer, p.category, p.li
   (SELECT count(*)::int FROM returns x WHERE x.product_id = p.id) AS return_count,
   (SELECT count(*)::int FROM test_sessions x WHERE x.product_id = p.id) AS test_session_count`;
 
+const attached = (p) => p.project_count + p.certification_count + p.listing_count + p.return_count + p.test_session_count;
+
 /**
- * Pairs of an Aether product not yet linked to Odyssey and a product synced from Odyssey that look like the same
- * thing, best first. Pairs someone marked "not the same" are left out.
+ * Which of two look-alike products to keep. An Aether product beats a synced copy (its name and data are the
+ * ones the team keeps); between two Aether products, the one linked to Odyssey; otherwise the one with more
+ * attached to it. → [keep, merge]
+ */
+function orient(a, b) {
+  if (a.source !== b.source) return a.source === 'aether' ? [a, b] : [b, a];
+  if (!!a.odyssey_id !== !!b.odyssey_id) return a.odyssey_id ? [a, b] : [b, a];
+  return attached(a) > attached(b) || (attached(a) === attached(b) && a.name.localeCompare(b.name) <= 0) ? [a, b] : [b, a];
+}
+
+/**
+ * Every pair of products that look like the same thing, best first: a hand-added Aether product and a synced
+ * copy, two Aether products, or two synced copies (Odyssey listing it twice). Pairs someone marked "not the
+ * same" are left out. `kind` says which, and `swappable` whether either could be the one kept.
  */
 export async function suggestDuplicates(db) {
   const [{ rows: products }, { rows: distinct }] = await Promise.all([
@@ -161,15 +176,16 @@ export async function suggestDuplicates(db) {
   ]);
   const dismissed = new Set(distinct.map((d) => `${d.product_a}:${d.product_b}`));
   const pairKey = (x, y) => (x < y ? `${x}:${y}` : `${y}:${x}`);
-  const aether = products.filter((p) => p.source === 'aether' && !p.odyssey_id);
-  const synced = products.filter((p) => p.source === 'odyssey');
 
   const pairs = [];
-  for (const a of aether) {
-    for (const b of synced) {
-      if (dismissed.has(pairKey(a.id, b.id))) continue;
-      const { score, reasons } = scorePair(a, b);
-      if (score >= MIN_SCORE) pairs.push({ score, reasons, keep: a, merge: b });
+  for (let i = 0; i < products.length; i++) {
+    for (let j = i + 1; j < products.length; j++) {
+      const [keep, merge] = orient(products[i], products[j]);
+      if (dismissed.has(pairKey(keep.id, merge.id))) continue;
+      const { score, reasons } = scorePair(keep, merge);
+      if (score < MIN_SCORE) continue;
+      const kind = keep.source === merge.source ? (keep.source === 'aether' ? 'both_aether' : 'both_odyssey') : 'aether_odyssey';
+      pairs.push({ score, reasons, keep, merge, kind, swappable: keep.source === merge.source });
     }
   }
   return pairs.sort((x, y) => y.score - x.score || x.keep.name.localeCompare(y.keep.name));
@@ -205,7 +221,9 @@ const addAlias = (db, productId, alias) =>
 
 /**
  * Fold product `mergeId` into `keepId` inside the transaction `tx`. The kept product keeps its name, lifecycle and
- * category; it takes the merged one's Odyssey link, model number and manufacturer when it has them, and anything it
+ * category. An Aether product is always the one kept over a synced copy. The kept product takes the merged one's
+ * Odyssey link, model number and manufacturer when it has none of its own (two Odyssey entries both end up on it),
+ * and anything it
  * lacks (SKU, dates, what it replaces). Markets, channels, notes and every record pointing at either product end up
  * on the kept one. The merged product's name, and the kept one's old model number if it changes, become aliases.
  */
@@ -215,8 +233,9 @@ export async function mergeProducts(tx, { keepId, mergeId, userId }) {
   const keep = rows.find((r) => r.id === keepId);
   const merge = rows.find((r) => r.id === mergeId);
   if (!keep || !merge) throw new HttpError(404, 'Product not found');
-  if (keep.source !== 'aether') throw new HttpError(400, 'Keep the product made in Aether, and merge the synced copy into it');
-  if (keep.odyssey_id && merge.odyssey_id) throw new HttpError(400, 'Both products are already linked to Odyssey');
+  if (keep.source !== 'aether' && merge.source === 'aether') {
+    throw new HttpError(400, `Keep the product made in Aether: open ${merge.name} and merge ${keep.name} into it`);
+  }
 
   for (const table of MOVED_TABLES) {
     await tx.query(`UPDATE ${table} SET product_id = $1 WHERE product_id = $2`, [keepId, mergeId]);
@@ -228,6 +247,16 @@ export async function mergeProducts(tx, { keepId, mergeId, userId }) {
     );
   }
   const { rows: aliases } = await tx.query('SELECT alias FROM product_aliases WHERE product_id = $1', [mergeId]);
+  // Both in Odyssey: the kept product keeps its own Odyssey ID and takes the other (and any it had) as extras,
+  // so later syncs file both Odyssey entries under it.
+  const bothInOdyssey = !!(keep.odyssey_id && merge.odyssey_id);
+  await tx.query('UPDATE product_odyssey_ids SET product_id = $1 WHERE product_id = $2', [keepId, mergeId]);
+  if (bothInOdyssey) {
+    await tx.query('INSERT INTO product_odyssey_ids (odyssey_id, product_id) VALUES ($1, $2) ON CONFLICT (odyssey_id) DO UPDATE SET product_id = $2', [
+      merge.odyssey_id,
+      keepId,
+    ]);
+  }
   // Whatever named the merged product as its replacement now names the kept one. (If the kept product said it
   // replaced the merged one, deleting the merged product clears that.)
   await tx.query('UPDATE products SET replaces_id = $1 WHERE replaces_id = $2 AND id <> $1', [keepId, mergeId]);
@@ -235,13 +264,14 @@ export async function mergeProducts(tx, { keepId, mergeId, userId }) {
   // Delete first: the merged product's Odyssey ID, model number and SKU are unique, and move to the kept one.
   await tx.query('DELETE FROM products WHERE id = $1', [mergeId]);
 
-  const fromOdyssey = !!merge.odyssey_id;
+  // Odyssey's model number and manufacturer win when the merged copy brings the Odyssey link.
+  const fromOdyssey = !!merge.odyssey_id && !keep.odyssey_id;
   const model = (fromOdyssey && merge.model) || keep.model || merge.model;
   const notes = [keep.notes, merge.notes].map((n) => n.trim()).filter(Boolean).join('\n\n');
   await tx.query(
     `UPDATE products SET
        odyssey_id   = COALESCE(odyssey_id, $2),
-       synced_at    = CASE WHEN $2::text IS NULL THEN synced_at ELSE now() END,
+       synced_at    = CASE WHEN $2::text IS NULL OR odyssey_id IS NOT NULL THEN synced_at ELSE now() END,
        model        = $3,
        manufacturer = $4,
        sku          = COALESCE(sku, $5),
@@ -274,6 +304,7 @@ export async function mergeProducts(tx, { keepId, mergeId, userId }) {
 
   const changes = { label: keep.name, merged: merge.name };
   if (merge.odyssey_id && !keep.odyssey_id) changes.odyssey_id = merge.odyssey_id;
+  if (bothInOdyssey) changes.extra_odyssey_id = merge.odyssey_id;
   if ((keep.model || null) !== (model || null)) changes.model = { from: keep.model, to: model };
   await logActivity(tx, { entityType: 'product', entityId: keepId, action: 'merged', changes, userId });
   await logActivity(tx, { entityType: 'product', entityId: mergeId, action: 'merged_into', changes: { label: merge.name, into: keep.name }, userId });

@@ -160,4 +160,41 @@ describe.skipIf(!TEST_DATABASE_URL)('merging duplicate products', () => {
     expect(body.error).toBe('This product is linked to Odyssey. Change model in Odyssey.');
     await editor.agent.patch(`/api/products/${porch.id}`).send({ name: 'Porch Camera (V2)', model: 'AB12345 V2', manufacturer: 'Other Factory' }).expect(200);
   });
+
+  it('suggests and merges two products added by hand', async () => {
+    const add = async (name, model) => (await editor.agent.post('/api/products').send({ name, model }).expect(201)).body.product;
+    const a = await add('Patio Light Cam', 'PL-7');
+    const b = await add('Patio Light Cam', 'PL7');
+    const { body } = await viewer.agent.get('/api/products/duplicates');
+    const pair = body.pairs.find((p) => [p.keep.id, p.merge.id].includes(a.id));
+    expect(pair).toMatchObject({ kind: 'both_aether', swappable: true });
+    expect([pair.keep.id, pair.merge.id].sort()).toEqual([a.id, b.id].sort());
+    // Either can be kept: here, the second one.
+    await editor.agent.post(`/api/products/${b.id}/merge`).send({ merge_id: a.id }).expect(200);
+    await viewer.agent.get(`/api/products/${a.id}`).expect(404);
+  });
+
+  it('merges two Odyssey entries for one product, and sync then files both under it', async () => {
+    fake.state.catalog.push({ id: 'ody-garage-2', name: 'Garage Sensor 2', modelNumber: 'GS-9', category: 'sensor', status: 'active' });
+    fake.state.sessions.push({ id: 'ses-garage-2', productName: 'Garage Sensor 2', catalogId: 'ody-garage-2', status: 'completed', testCaseCount: 3, passCount: 3 });
+    await editor.agent.post('/api/odyssey/sync').expect(200);
+    const one = await synced('ody-garage');
+    const two = await synced('ody-garage-2');
+
+    const { body } = await viewer.agent.get('/api/products/duplicates');
+    expect(body.pairs.find((p) => p.keep.id === one.id || p.merge.id === one.id)).toMatchObject({ kind: 'both_odyssey', swappable: true });
+
+    await editor.agent.post(`/api/products/${one.id}/merge`).send({ merge_id: two.id }).expect(200);
+    const { rows } = await db.query('SELECT odyssey_id, product_id FROM product_odyssey_ids');
+    expect(rows).toEqual([{ odyssey_id: 'ody-garage-2', product_id: one.id }]);
+    expect((await viewer.agent.get(`/api/products/${one.id}`)).body.product).toMatchObject({ odyssey_id: 'ody-garage', name: 'Garage Sensor' });
+
+    // The second Odyssey entry is still there, but sync no longer re-adds it, and its test results land on the kept product.
+    const { body: run } = await editor.agent.post('/api/odyssey/sync').expect(200);
+    expect(run.run).toMatchObject({ products_created: 0 });
+    const { rows: copies } = await db.query("SELECT count(*)::int AS n FROM products WHERE name = 'Garage Sensor 2'");
+    expect(copies[0].n).toBe(0);
+    const { body: sessions } = await viewer.agent.get(`/api/test-sessions?productId=${one.id}`);
+    expect(sessions.sessions.map((s) => s.odyssey_id)).toContain('ses-garage-2');
+  });
 });

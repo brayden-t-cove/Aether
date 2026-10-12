@@ -61,8 +61,8 @@ export default function ProductsPage() {
 
       {pairCount > 0 && (
         <p className="alert duplicates-note">
-          {pairCount === 1 ? '1 pair of products looks' : `${pairCount} pairs of products look`} like the same thing, one added here and one synced from
-          Odyssey. <Link to="/products/duplicates">Review possible duplicates</Link>
+          {pairCount === 1 ? '1 pair of products looks' : `${pairCount} pairs of products look`} like the same thing.{' '}
+          <Link to="/products/duplicates">Review possible duplicates</Link>
         </p>
       )}
 
