@@ -108,6 +108,9 @@ export const VENDOR_STATUSES = {
 
 // ── Phase 4 ────────────────────────────────────────────────────────────────
 
+/** How a test report (a lab report or in-house test added by hand) came out. */
+export const TEST_RESULTS = { passed: 'Passed', partial: 'Partly passed', failed: 'Failed' };
+
 export const CHANNELS = {
   amazon: 'Amazon',
   tiktok: 'TikTok',

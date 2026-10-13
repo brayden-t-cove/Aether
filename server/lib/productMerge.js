@@ -18,6 +18,7 @@ export const MOVED_TABLES = [
   'documents',
   'design_requests',
   'test_sessions',
+  'test_reports',
   'product_listings',
   'returns',
   'comparisons',

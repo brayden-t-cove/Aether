@@ -9,7 +9,7 @@ const formatSize = (bytes) => (bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).to
  * Files and links on a record. Uploads appear only when the server has file
  * storage set up; links always work.
  */
-export default function Attachments({ entityType, entityId, attachments = [], editable, onChange, compact = false }) {
+export default function Attachments({ entityType, entityId, attachments = [], editable, onChange, compact = false, accept }) {
   const { data: config } = useLoad('/api/attachments/config');
   const [adding, setAdding] = useState(null); // null | 'link'
   const [url, setUrl] = useState('');
@@ -109,7 +109,7 @@ export default function Attachments({ entityType, entityId, attachments = [], ed
               <button className="btn small" onClick={() => fileInput.current?.click()} disabled={busy}>
                 {busy ? 'Uploading…' : 'Upload file'}
               </button>
-              <input ref={fileInput} type="file" hidden onChange={upload} />
+              <input ref={fileInput} type="file" hidden accept={accept} onChange={upload} />
             </>
           )}
           <button className="btn ghost small" onClick={() => setAdding('link')} disabled={busy}>

@@ -136,6 +136,11 @@ export function describeActivity(a) {
       if (a.action === 'merged_into') return `${who} merged ${label} into ${c.into}`;
       if (a.action === 'returns_moved') return `${who} moved ${c.rows} returns (${c.returns}) from ${label} to ${c.to}`;
       if (a.action === 'returns_moved_in') return `${who} moved ${c.rows} returns (${c.returns}) to ${label} from ${c.from}`;
+      if (a.action === 'test_report_added') return `${who} added test result ${label}`;
+      if (a.action === 'test_report_updated') return `${who} updated test result ${label} ${describeChanges(c)}`;
+      if (a.action === 'test_report_removed') return `${who} removed test result ${label}`;
+      if (a.action === 'attachment_added' && c.report) return `${who} attached ${label} to test result "${c.report}"`;
+      if (a.action === 'attachment_removed' && c.report) return `${who} removed ${label} from test result "${c.report}"`;
       if (a.action === 'marked_distinct') return `${who} marked ${label} and ${c.other} as different products`;
     // falls through
     case 'market':

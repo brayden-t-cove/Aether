@@ -24,14 +24,44 @@ test('Sync now links matching products and adds Odyssey-only ones as read-only',
   await expect(page.getByText('Aether-only notes still editable')).toBeVisible();
 });
 
-test('Odyssey test results show on the product and its projects', async ({ page }) => {
-  await login(page);
+test('test results: Odyssey sessions, pulled on demand, and reports added as a PDF or a link', async ({ page }) => {
+  await login(page, 'editor');
   await page.goto('/products');
   await page.getByRole('link', { name: 'Sample Window Cam', exact: true }).click();
-  const tests = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Test results from Odyssey' }) });
+  const tests = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Test results', exact: true }) });
   await expect(tests).toContainText('production');
   await expect(tests).toContainText('37/40');
   await expect(tests).toContainText('2 failed');
+  await tests.getByRole('button', { name: 'Pull from Odyssey' }).click();
+  await expect(tests).toContainText('Pulled from Odyssey');
+
+  // A lab report, uploaded as a PDF.
+  await tests.getByRole('button', { name: 'Add test result' }).click();
+  const form = tests.getByRole('form', { name: 'Add a test result' });
+  await form.getByLabel('Title').fill('Drop test');
+  await form.getByLabel('Result').selectOption('passed');
+  await form.getByLabel('Tested by').fill('Sample Lab');
+  await form.getByLabel('Report PDF').setInputFiles({ name: 'drop-test.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 e2e') });
+  await form.getByRole('button', { name: 'Save test result' }).click();
+  const reports = tests.getByRole('list', { name: 'Test reports' });
+  await expect(reports.locator('li', { hasText: 'Drop test' })).toContainText('Passed');
+  await expect(reports.getByRole('link', { name: 'drop-test.pdf' })).toBeVisible();
+
+  // Or a link to one.
+  await tests.getByRole('button', { name: 'Add test result' }).click();
+  await form.getByLabel('Title').fill('FCC pre-scan');
+  await form.getByLabel('Link to a PDF').check();
+  await form.getByLabel('Report link').fill('https://example.com/prescan.pdf');
+  await form.getByRole('button', { name: 'Save test result' }).click();
+  await expect(reports.getByRole('link', { name: 'FCC pre-scan' })).toHaveAttribute('href', 'https://example.com/prescan.pdf');
+
+  // Viewers see them but can't add or remove.
+  await login(page, 'viewer');
+  await page.goto('/products');
+  await page.getByRole('link', { name: 'Sample Window Cam', exact: true }).click();
+  await expect(tests.getByRole('list', { name: 'Test reports' })).toContainText('Drop test');
+  await expect(tests.getByRole('button', { name: 'Add test result' })).toHaveCount(0);
+  await expect(tests.getByRole('button', { name: 'Pull from Odyssey' })).toHaveCount(0);
 });
 
 test('an Aether product is sent to Odyssey once', async ({ page }) => {
