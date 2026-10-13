@@ -11,7 +11,7 @@ import ItemPanel from '../components/ItemPanel.jsx';
 import ErrorNote from '../components/ErrorNote.jsx';
 import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
-import TestSessions from '../components/TestSessions.jsx';
+import TestResults from '../components/TestResults.jsx';
 
 /**
  * Group by stage, in the order stages first appear, when items have stages
@@ -358,7 +358,7 @@ export default function ProjectPage() {
         />
       )}
 
-      {project.product_id && <TestSessions projectId={project.id} />}
+      {project.product_id && <TestResults projectId={project.id} />}
 
       <section className="card">
         <h2>History</h2>

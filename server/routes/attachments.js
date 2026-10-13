@@ -21,6 +21,10 @@ async function activityTarget(db, entityType, entityId) {
     const { rows } = await db.query('SELECT project_id, title FROM checklist_items WHERE id = $1', [entityId]);
     return { entityType: 'project', entityId: rows[0].project_id, extra: { item_id: entityId, item: rows[0].title } };
   }
+  if (entityType === 'test_report') {
+    const { rows } = await db.query('SELECT product_id, title FROM test_reports WHERE id = $1', [entityId]);
+    return { entityType: 'product', entityId: rows[0].product_id, extra: { report: rows[0].title } };
+  }
   return { entityType, entityId, extra: {} };
 }
 

@@ -8,7 +8,7 @@ test('Integrations shows what is connected, and the Slack buttons work', async (
   const card = (title) => page.locator('.card').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
   await expect(card('Odyssey')).toContainText('Connected');
   await expect(card('Odyssey')).toContainText('http://127.0.0.1:4101');
-  await expect(card('Odyssey').locator('tbody tr')).toHaveCount(1); // the one sync from the products page
+  await expect(card('Odyssey').locator('tbody tr')).toHaveCount(2); // Sync now on the products page, then Pull from Odyssey on a product's test results
   await expect(card('Slack')).toContainText('Connected');
   await expect(card('File uploads')).toContainText('On');
   await expect(card('About this server')).toContainText('staging');

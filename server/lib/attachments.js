@@ -1,10 +1,11 @@
-/** Files and links attached to certifications, document versions, design requests and checklist items. */
+/** Files and links attached to certifications, document versions, design requests, checklist items and test reports. */
 
 export const ATTACHABLE = {
   certification: 'certifications',
   document_version: 'document_versions',
   design_request: 'design_requests',
   checklist_item: 'checklist_items',
+  test_report: 'test_reports',
 };
 
 export async function listAttachments(db, entityType, entityIds) {

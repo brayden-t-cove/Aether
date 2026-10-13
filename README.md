@@ -45,7 +45,7 @@ Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hide
   - **Possible duplicates** (Products page): Aether pairs products that look like the same thing and says why: one added by hand and a copy sync couldn't link because its name or model differs a little ("AB-123" vs "AB123 V2"), two added by hand, or Odyssey listing the same product twice. An editor merges them (picking which to keep when both are the same kind) or marks them as not the same. Merging keeps the kept product's name and data, takes Odyssey's link, model number and manufacturer when it had none, moves everything from the copy onto it, and keeps the copy's name as another name for search. When both were in Odyssey, the kept product holds both Odyssey IDs, so sync files both entries' test results under it and doesn't add the copy back.
   - For a duplicate the suggestions miss, open the product and use **Merge a duplicate into this product**.
   - Odyssey-only records arrive as synced, with their core fields read-only.
-  - Test results show on product and project pages.
+  - **Test results** show on product and project pages: Odyssey's test sessions, with a **Pull from Odyssey** button for editors, and test results added by hand (a lab report or in-house test, with its result, date and who ran it) with the report uploaded as a PDF or linked. A result added from a project belongs to its product, so every project for that product shows it.
   - **Send to Odyssey** adds an Aether product to Odyssey's catalog.
   - Setup and matching rules: [docs/ODYSSEY_API.md](docs/ODYSSEY_API.md). Odyssey needs a small change to accept Aether's service key.
 
