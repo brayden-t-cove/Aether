@@ -17,13 +17,14 @@ import {
   reviewQueue,
   setReturnCategory,
   setReturnFlag,
-  setSecondaryCategories,
+  changeMention,
   unmatchedReturns,
 } from '../lib/returns.js';
 import { getCodebook } from '../lib/returnCodebook.js';
 import { cleanNote, sortReturns } from '../lib/returnRules.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MENTION_ACTIONS = ['check', 'dismiss', 'refile', 'add'];
 
 function readFilters(q) {
   return {
@@ -34,7 +35,7 @@ function readFilters(q) {
     marketId: isUuid(q.marketId) ? q.marketId : undefined,
     flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
     blank: q.blank === '1',
-    bucket: BUCKET_KEYS.includes(q.bucket) ? q.bucket : undefined,
+    bucket: BUCKET_KEYS.includes(q.bucket) || q.bucket === 'generic' ? q.bucket : undefined,
     noted: q.noted === '1',
     subreason: /^[a-z][a-z0-9_]{0,49}$/.test(q.subreason ?? '') ? q.subreason : undefined,
   };
@@ -224,21 +225,23 @@ export function returnRoutes({ db, notify }) {
     }),
   );
 
-  // Other problems the buyer also mentions. { categories: [codebook keys] } replaces the list.
-  router.put(
-    '/api/returns/:id/secondary',
+  // A person acts on one of a return's mentions: { action: check | dismiss | refile | add, category, to: { category, subreason } }.
+  router.post(
+    '/api/returns/:id/mentions',
     requireRole('editor'),
     asyncHandler(async (req, res) => {
       if (!isUuid(req.params.id)) throw new HttpError(404, 'Return not found');
-      const categories = req.body?.categories;
-      if (!Array.isArray(categories) || categories.length > 10 || !categories.every((k) => typeof k === 'string')) {
-        throw new HttpError(400, 'Categories must be a list of codebook keys');
-      }
-      const result = await setSecondaryCategories(db, { id: req.params.id, categories, userId: req.user.id });
+      const action = req.body?.action;
+      if (!MENTION_ACTIONS.includes(action)) throw new HttpError(400, `Action must be one of ${MENTION_ACTIONS.join(', ')}`);
+      const key = /^[a-z][a-z0-9_]{0,49}$/;
+      const category = typeof req.body.category === 'string' && key.test(req.body.category) ? req.body.category : null;
+      if (action !== 'add' && !category) throw new HttpError(400, 'Say which mention');
+      const to = req.body.to && typeof req.body.to === 'object' ? { category: String(req.body.to.category ?? ''), subreason: String(req.body.to.subreason ?? '') } : null;
+      const result = await withTransaction(db, (tx) => changeMention(tx, { id: req.params.id, action, category, to, userId: req.user.id }));
       if (!result) throw new HttpError(404, 'Return not found');
-      if (result.invalid) throw new HttpError(400, 'Unknown category');
-      await logActivity(db, { entityType: 'return', entityId: req.params.id, action: 'secondary_updated', changes: { label: result.label, categories: result.names }, userId: req.user.id });
-      res.json({ ok: true, secondary: result.names });
+      if (result.invalid) throw new HttpError(400, result.invalid);
+      await logActivity(db, { entityType: 'return', entityId: req.params.id, action: `mention_${action}`, changes: result, userId: req.user.id });
+      res.json({ ok: true });
     }),
   );
 

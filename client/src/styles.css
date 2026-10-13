@@ -32,6 +32,7 @@
   --series-4: #eda100;
   --series-5: #e87ba4;
   --series-6: #008300;
+  --series-generic: #4a3aa7;
   /* Neutrals for the slices that aren't a bucket: Other, and returns with no comment. */
   --series-other: #8a9396;
   --series-blank: #cfd6d7;
@@ -78,6 +79,7 @@
     --series-4: #c98500;
     --series-5: #d55181;
     --series-6: #008300;
+    --series-generic: #9085e9;
     --series-other: #7d8a8d;
     --series-blank: #3f4b4e;
     --chart-grid: #262b33;
@@ -117,6 +119,7 @@
   --series-4: #c98500;
   --series-5: #d55181;
   --series-6: #008300;
+  --series-generic: #9085e9;
   --series-other: #7d8a8d;
   --series-blank: #3f4b4e;
   --chart-grid: #262b33;
@@ -2233,6 +2236,14 @@ mark.matched {
 
 .merge-zone {
   margin-top: 1rem;
+}
+
+.also-mentions {
+  margin: 0.15rem 0 0;
+  color: var(--text-muted);
+}
+.bucket-group .bucket-name {
+  font-weight: 600;
 }
 
 /* A buyer's note in the import preview: a few lines, the rest on hover. */

@@ -1,6 +1,6 @@
 /**
- * Adding up /api/returns/weekly rows for the Returns page's dashboard views. Each row is one week × channel ×
- * product × category × blank note, with `reasoned` (in a bucket), `returns` (count) and `units` (quantity).
+ * Adding up /api/returns/weekly for the Returns page's dashboard views. `rows`: one per week × channel × product ×
+ * blank note, with `returns` (reviews) and `units`. `mentions`: one per week × channel × bucket, with `mentions`.
  * Kept free of React so it can be unit-tested.
  */
 const sum = (rows, key = 'units') => rows.reduce((n, r) => n + r[key], 0);
@@ -20,18 +20,17 @@ export function change(prev, last) {
 }
 
 /**
- * Units per week for each bucket, with last week compared to the one before.
- * → [{ key, label, perWeek: { week: units }, total, ...change }] busiest last week first.
+ * Mentions per week for each bucket, with last week compared to the one before.
+ * → [{ key, label, perWeek: { week: mentions }, total, ...change }] busiest last week first.
  */
 export function weeklyGroups(data) {
   const [prev, last] = lastTwoComplete(data.weeks);
   const groups = new Map();
-  for (const r of data.rows) {
-    if (!r.reasoned) continue; // No Comment and unsorted returns have no reason to compare
+  for (const r of data.mentions) {
     if (!groups.has(r.category_key)) groups.set(r.category_key, { key: r.category_key, label: r.category_name, perWeek: {}, total: 0 });
     const g = groups.get(r.category_key);
-    g.perWeek[r.week] = (g.perWeek[r.week] || 0) + r.units;
-    g.total += r.units;
+    g.perWeek[r.week] = (g.perWeek[r.week] || 0) + r.mentions;
+    g.total += r.mentions;
   }
   return [...groups.values()]
     .map((g) => ({ ...g, ...change(prev ? g.perWeek[prev.week] || 0 : 0, last ? g.perWeek[last.week] || 0 : 0) }))
@@ -52,12 +51,14 @@ export function weekTotals(data) {
   });
 }
 
-/** One channel's figures over the whole period: units, returns, units with a reason, returns with no note, and units per bucket. */
-export function channelFigures(rows) {
-  const reasoned = rows.filter((r) => r.reasoned);
+/** One channel's figures over the whole period: units, reviews, reviews with no note, and mentions per bucket. */
+export function channelFigures(data, channel) {
+  const rows = data.rows.filter((r) => r.channel === channel);
   const categories = {};
-  for (const r of reasoned) categories[r.category_key] = { label: r.category_name, units: (categories[r.category_key]?.units || 0) + r.units };
-  return { units: sum(rows), returns: sum(rows, 'returns'), shareUnits: sum(reasoned), blank: sum(rows.filter((r) => r.blank), 'returns'), categories };
+  for (const m of data.mentions.filter((x) => x.channel === channel)) {
+    categories[m.category_key] = { label: m.category_name, mentions: (categories[m.category_key]?.mentions || 0) + m.mentions };
+  }
+  return { units: sum(rows), returns: sum(rows, 'returns'), blank: sum(rows.filter((r) => r.blank), 'returns'), categories };
 }
 
 /** Per product: units per channel, returns, and returns with no note. Busiest first. */

@@ -75,7 +75,7 @@ describe.skipIf(!TEST_DATABASE_URL)('sub-reason causes and the camera-fault flag
 
   it('counts returns with a reason and lists what was set aside', async () => {
     const body = await totals();
-    expect(body.totals).toMatchObject({ units: 6, share_units: 6, set_aside_units: 2 });
+    expect(body.totals).toMatchObject({ reviews: 6, units: 6, mentions: 6, set_aside_units: 2 });
     expect(body.setAside).toEqual([{ category_key: 'sample', key: 'refundable_sample', name: 'Refundable sample', units: 2 }]);
   });
 });
