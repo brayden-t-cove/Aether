@@ -7,7 +7,8 @@ const WEEKS = [
   { week: '2026-09-21', end: '2026-09-27', partial: false },
   { week: '2026-09-28', end: '2026-10-04', partial: true },
 ];
-const row = (o) => ({ channel: 'tiktok', product_id: 'p1', product_name: 'Sample Cam', category_key: 'connectivity', category_name: 'Connectivity', reasoned: true, blank: false, returns: 1, units: 1, ...o });
+const row = (o) => ({ channel: 'tiktok', product_id: 'p1', product_name: 'Sample Cam', blank: false, returns: 1, units: 1, ...o });
+const mention = (o) => ({ channel: 'tiktok', category_key: 'connectivity', category_name: 'Connectivity', mentions: 1, ...o });
 
 describe('adding up weekly returns', () => {
   const data = {
@@ -15,9 +16,17 @@ describe('adding up weekly returns', () => {
     rows: [
       row({ week: '2026-09-14', units: 2, returns: 2 }),
       row({ week: '2026-09-21', units: 6, returns: 5 }),
-      row({ week: '2026-09-21', category_key: 'fit', category_name: 'Fit & Installation', channel: 'amazon' }),
-      row({ week: '2026-09-21', category_key: 'no_comment', category_name: 'No Comment', reasoned: false, blank: true, returns: 3, units: 3 }),
+      row({ week: '2026-09-21', channel: 'amazon' }),
+      row({ week: '2026-09-21', blank: true, returns: 3, units: 3 }),
       row({ week: '2026-09-28', units: 9, returns: 9 }), // this week so far: never compared
+    ],
+    mentions: [
+      mention({ week: '2026-09-14', mentions: 2 }),
+      mention({ week: '2026-09-21', mentions: 5 }),
+      // One of those five reviews also mentioned fit; and an Amazon one did.
+      mention({ week: '2026-09-21', category_key: 'fit', category_name: 'Fit & Installation' }),
+      mention({ week: '2026-09-21', channel: 'amazon', category_key: 'fit', category_name: 'Fit & Installation' }),
+      mention({ week: '2026-09-28', mentions: 9 }),
     ],
   };
 
@@ -34,10 +43,10 @@ describe('adding up weekly returns', () => {
     expect(change(5, 1)).toMatchObject({ delta: -4, pct: -80, rising: false });
   });
 
-  it('groups returns with a reason by bucket, leaving out No Comment', () => {
+  it('counts mentions per bucket, a review in each bucket it mentions', () => {
     expect(weeklyGroups(data).map((g) => [g.key, g.prev, g.last, g.rising])).toEqual([
-      ['connectivity', 2, 6, true],
-      ['fit', 0, 1, false],
+      ['connectivity', 2, 5, true],
+      ['fit', 0, 2, false],
     ]);
   });
 
@@ -50,9 +59,9 @@ describe('adding up weekly returns', () => {
   });
 
   it('sums a channel and splits products', () => {
-    const tiktok = channelFigures(data.rows.filter((r) => r.channel === 'tiktok'));
-    expect(tiktok).toMatchObject({ units: 20, returns: 19, shareUnits: 17, blank: 3 });
-    expect(tiktok.categories).toEqual({ connectivity: { label: 'Connectivity', units: 17 } });
+    const tiktok = channelFigures(data, 'tiktok');
+    expect(tiktok).toMatchObject({ units: 20, returns: 19, blank: 3 });
+    expect(tiktok.categories).toEqual({ connectivity: { label: 'Connectivity', mentions: 16 }, fit: { label: 'Fit & Installation', mentions: 1 } });
     expect(productBreakdown(data.rows)).toEqual([
       { key: 'p1', productId: 'p1', name: 'Sample Cam', units: 21, returns: 20, blank: 3, byChannel: { tiktok: 20, amazon: 1 } },
     ]);
@@ -114,15 +123,21 @@ describe.skipIf(!TEST_DATABASE_URL)('the weekly returns API', () => {
     expect(body.weeks.at(-1).week <= today && today <= body.weeks.at(-1).end).toBe(true);
   });
 
-  it('puts each return in its week, with whether it has a reason and a note, leaving out samples', async () => {
-    const { rows } = await weekly('weeks=3&end=2026-10-02');
-    const pick = (r) => [r.week, r.category_key, r.reasoned, r.blank, r.units];
-    expect(rows.map(pick).sort()).toEqual(
+  it('puts each return in its week, with whether it has a note, and each mention in its bucket, leaving out samples', async () => {
+    const body = await weekly('weeks=3&end=2026-10-02');
+    expect(body.rows.map((r) => [r.week, r.blank, r.returns, r.units]).sort()).toEqual(
       [
-        ['2026-09-14', 'connectivity', true, false, 1],
-        ['2026-09-21', 'connectivity', true, false, 1],
-        ['2026-09-21', 'no_comment', false, true, 1],
-        ['2026-09-28', 'fit', true, false, 1],
+        ['2026-09-14', false, 1, 1],
+        ['2026-09-21', false, 1, 1],
+        ['2026-09-21', true, 1, 1],
+        ['2026-09-28', false, 1, 1],
+      ].sort(),
+    );
+    expect(body.mentions.map((m) => [m.week, m.category_key, m.mentions]).sort()).toEqual(
+      [
+        ['2026-09-14', 'connectivity', 1],
+        ['2026-09-21', 'connectivity', 1],
+        ['2026-09-28', 'fit', 1],
       ].sort(),
     );
   });

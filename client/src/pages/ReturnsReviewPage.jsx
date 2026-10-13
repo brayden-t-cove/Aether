@@ -68,29 +68,30 @@ function Flags({ r, editable, onSaved }) {
   );
 }
 
-/** Other categories the buyer also mentions. */
-function Secondary({ r, codebook, editable, onSaved }) {
+/** The other problems the note mentions, each counted in its own bucket. */
+function AlsoMentions({ r, codebook, editable, onSaved }) {
   const [error, setError] = useState(null);
-  const names = new Map(codebook.map((c) => [c.key, c.name]));
-  const choices = codebook.filter((c) => c.in_share && c.key !== r.category_key && !r.secondary.includes(c.key));
-  async function save(keys) {
+  const others = r.mentions.filter((m) => m.category !== r.category_key);
+  const choices = codebook.filter((c) => c.in_share && !r.mentions.some((m) => m.category === c.key));
+  async function send(body) {
     setError(null);
     try {
-      await api(`/api/returns/${r.id}/secondary`, { method: 'PUT', body: { categories: keys } });
+      await api(`/api/returns/${r.id}/mentions`, { method: 'POST', body });
       onSaved();
     } catch (err) {
       setError(err);
     }
   }
-  if (!editable && !r.secondary.length) return null;
+  if (!editable && !others.length) return null;
   return (
     <div className="small">
-      <span className="muted">Also about: </span>
-      {r.secondary.map((k) => (
-        <span key={k} className="tag">
-          {names.get(k)}
+      <span className="muted">Also mentions: </span>
+      {others.map((m) => (
+        <span key={m.category} className="tag" title={m.why || 'Added by a person'}>
+          {m.category_name}
+          {m.subreason_name && <span className="muted"> · {m.subreason_name}</span>}
           {editable && (
-            <button type="button" className="link-btn" aria-label={`Remove ${names.get(k)}`} onClick={() => save(r.secondary.filter((x) => x !== k))}>
+            <button type="button" className="link-btn" aria-label={`Not about ${m.category_name}`} onClick={() => send({ action: 'dismiss', category: m.category })}>
               {' '}
               ×
             </button>
@@ -98,12 +99,23 @@ function Secondary({ r, codebook, editable, onSaved }) {
         </span>
       ))}
       {editable && (
-        <select aria-label="Add another category" value="" onChange={(e) => e.target.value && save([...r.secondary, e.target.value])}>
-          <option value="">{r.secondary.length ? 'Add…' : 'Nothing else. Add…'}</option>
+        <select
+          aria-label="Add another mention"
+          value=""
+          onChange={(e) => {
+            const [category, subreason] = e.target.value.split('/');
+            if (category) send({ action: 'add', to: { category, subreason } });
+          }}
+        >
+          <option value="">{others.length ? 'Add…' : 'Nothing else. Add…'}</option>
           {choices.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.name}
-            </option>
+            <optgroup key={c.key} label={c.name}>
+              {c.subreasons.map((sr) => (
+                <option key={sr.key} value={`${c.key}/${sr.key}`}>
+                  {sr.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       )}
@@ -167,7 +179,7 @@ function ReturnRow({ r, view, codebook, editable, onSaved }) {
             )}
           </div>
           <ErrorNote error={error} />
-          <Secondary r={r} codebook={codebook} editable={editable} onSaved={onSaved} />
+          <AlsoMentions r={r} codebook={codebook} editable={editable} onSaved={onSaved} />
         </td>
       )}
     </tr>

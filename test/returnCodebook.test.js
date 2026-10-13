@@ -16,10 +16,10 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
   });
   afterAll(() => db?.end());
 
-  it('has six buckets plus Other, each with a definition, and keeps every sub-reason', () => {
+  it('has six buckets plus Other, Generic for notes that say nothing specific, each with a definition, and keeps every sub-reason', () => {
     expect(codebook.map((c) => c.name)).toEqual([
       'Connectivity', 'Fit & Installation', 'Subscription', 'Performance / Hardware', 'Shipping, Logistics, Missing Parts / Damaged',
-      'Changed Mind', 'Other', 'No Comment', 'Sample Program', 'Not a Customer Return',
+      'Changed Mind', 'Other', 'Generic', 'No Comment', 'Sample Program', 'Not a Customer Return',
     ]);
     expect(codebook.every((c) => c.description.length > 20)).toBe(true);
     expect(codebook.flatMap((c) => c.subreasons)).toHaveLength(50);
@@ -36,7 +36,8 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
       'image_quality', 'motion', 'lag', 'not_recording', 'wont_power_on', 'support_confirmed', 'works_then_dies', 'overheating',
       'app_setup', 'no_manual', 'firmware',
     ]);
-    expect(category('non_specific').subreasons.map((s) => s.key)).toEqual(['vague', 'trust']);
+    expect(category('non_specific').subreasons.map((s) => s.key)).toEqual(['trust']);
+    expect(category('generic').subreasons.map((s) => s.key)).toEqual(['vague']);
   });
 
   it('breaks ties shipping first and Other last', () => {
@@ -47,7 +48,7 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
   });
 
   it('leaves No Comment out of the shares and sets aside samples and non-customer returns', () => {
-    expect(codebook.filter((c) => !c.in_share).map((c) => c.key)).toEqual(['no_comment', 'sample', 'not_customer']);
+    expect(codebook.filter((c) => !c.in_share).map((c) => c.key)).toEqual(['generic', 'no_comment', 'sample', 'not_customer']);
     expect(codebook.filter((c) => c.set_aside).map((c) => c.key)).toEqual(['sample', 'not_customer']);
   });
 
@@ -55,7 +56,7 @@ describe.skipIf(!TEST_DATABASE_URL)('returns codebook', () => {
     await request(app).get('/api/returns/codebook').expect(401);
     const { agent } = await signedInAgent(app, db, { email: 'reader@example.com' });
     const res = await agent.get('/api/returns/codebook').expect(200);
-    expect(res.body.categories).toHaveLength(10);
+    expect(res.body.categories).toHaveLength(11);
     expect(res.body.categories[0]).toMatchObject({ key: 'connectivity', in_share: true, set_aside: false });
   });
 

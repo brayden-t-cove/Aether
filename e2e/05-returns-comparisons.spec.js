@@ -43,10 +43,10 @@ test('an Amazon returns report is previewed, imported, and re-importing is harml
 test('the returns page shows one month: buckets, comments, the key, platform vs notes and products', async ({ page }) => {
   await login(page);
   await page.goto('/returns?month=2026-09');
-  const stat = (label) => page.locator('.stat', { hasText: label }).locator('.stat-value');
+  const stat = (label) => page.locator('.stat').filter({ has: page.locator('.stat-label').getByText(label, { exact: true }) }).locator('.stat-value');
   // September: the W4 return with no note. The carrier-damaged one never reached a customer, so it's set aside; it still waits for a product.
   await expect(page.getByLabel('Month to show')).toHaveValue('2026-09');
-  await expect(stat('Units returned')).toHaveText('1');
+  await expect(stat('Reviews')).toHaveText('1');
   await expect(stat('Left a comment')).toHaveText('0%');
   await expect(stat('Not matched to a product')).toHaveText('1');
 
@@ -61,10 +61,10 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
 
   await page.getByRole('button', { name: 'Previous month' }).click();
   await expect(page.getByLabel('Month to show')).toHaveValue('2026-08');
-  await expect(stat('Units returned')).toHaveText('2');
+  await expect(stat('Reviews')).toHaveText('1');
   await page.getByRole('button', { name: 'Previous month' }).click();
   // July: one return, "Stopped working", picked as Defective.
-  await expect(stat('Units returned')).toHaveText('1');
+  await expect(stat('Reviews')).toHaveText('1');
   await expect(stat('Left a comment')).toHaveText('100%');
   await expect(stat('Top bucket')).toHaveText('Performance / Hardware');
   await expect(page.locator('.donut-legend').first()).toContainText('Performance / Hardware1 · 100%');
@@ -88,7 +88,7 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   const products = page.locator('.card', { hasText: 'By product' });
   await products.getByRole('button', { name: 'Sample Doorbell' }).click();
   await expect(products.locator('.product-detail')).toContainText('“Stopped working”');
-  await expect(stat('Units returned')).toHaveText('1');
+  await expect(stat('Reviews')).toHaveText('1');
   await expect(page).not.toHaveURL(/productId/);
 });
 

@@ -52,28 +52,36 @@ describe.skipIf(!TEST_DATABASE_URL)('reviewing returns', () => {
 
   it('lets editors file a return, and the rules never change it back', async () => {
     const id = await idOf('RV-2');
-    await viewer.patch(`/api/returns/${id}/category`).send({ category: 'non_specific', subreason: 'vague' }).expect(403);
-    const res = await editor.patch(`/api/returns/${id}/category`).send({ category: 'non_specific', subreason: 'vague' }).expect(200);
+    await viewer.patch(`/api/returns/${id}/category`).send({ category: 'generic', subreason: 'vague' }).expect(403);
+    const res = await editor.patch(`/api/returns/${id}/category`).send({ category: 'generic', subreason: 'vague' }).expect(200);
     expect(res.body).toEqual({ ok: true, confirmed: false });
-    expect(await row('RV-2')).toMatchObject({ category: 'non_specific', subreason: 'vague', category_source: 'manual', category_why: '' });
+    expect(await row('RV-2')).toMatchObject({ category: 'generic', subreason: 'vague', category_source: 'manual', category_why: '' });
     expect((await row('RV-2')).reviewed_at).toBeTruthy();
 
     await editor.post('/api/returns/sort').expect(200);
-    expect(await row('RV-2')).toMatchObject({ category: 'non_specific', category_source: 'manual' });
+    expect(await row('RV-2')).toMatchObject({ category: 'generic', category_source: 'manual' });
 
     const { body } = await viewer.get('/api/activity').expect(200);
     expect(body.activity.find((a) => a.action === 'categorized')).toMatchObject({
       entity_type: 'return',
       entity_id: id,
-      changes: { label: 'Sample Cam', from: null, to: 'Other / Vague ("doesn\'t work", "not as expected")' },
+      changes: { label: 'Sample Cam', from: null, to: 'Generic / Vague ("doesn\'t work", "not as expected")' },
     });
   });
 
-  it('lets editors confirm the rules’ call, keeping the reason it was made', async () => {
+  it('lets editors confirm the rules’ call, keeping the reason it was made and checking the other mentions shown with it', async () => {
     const id = await idOf('RV-1');
+    // Say the rules had also found a second problem in the note.
+    await db.query(
+      `INSERT INTO return_mentions (return_id, category_id, subreason_id, source)
+       SELECT $1, c.id, s.id, 'rule' FROM return_categories c JOIN return_subreasons s ON s.category_id = c.id WHERE c.key = 'fit' AND s.key = 'window'`,
+      [id],
+    );
     const res = await editor.patch(`/api/returns/${id}/category`).send({ category: 'connectivity', subreason: 'drops_offline' }).expect(200);
     expect(res.body.confirmed).toBe(true);
     expect(await row('RV-1')).toMatchObject({ category_source: 'manual', category_why: 'note matched: "keeps going off"' });
+    const { rows: mentions } = await db.query('SELECT checked_at IS NOT NULL AS checked FROM return_mentions WHERE return_id = $1 AND NOT dismissed', [id]);
+    expect(mentions).toEqual([{ checked: true }, { checked: true }]);
 
     const { body } = await viewer.get('/api/returns/review?view=unreviewed').expect(200);
     expect(body.returns).toEqual([]);

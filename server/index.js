@@ -8,11 +8,22 @@ import { runOdysseySync } from './lib/sync.js';
 import { startScheduler } from './lib/scheduler.js';
 import { createNotifier, messages } from './lib/notify.js';
 import { maybeSendDigest } from './lib/digest.js';
+import { withTransaction } from './lib/db.js';
+import { sortReturns } from './lib/returnRules.js';
 
 assertConfig();
 
 const db = createPool({ connectionString: config.databaseUrl, ssl: config.databaseSsl });
 await migrate(db);
+
+// Returns imported before mentions existed are read again once, so a note that raises two problems counts in both.
+{
+  const { rows } = await db.query('SELECT count(*)::int AS n FROM returns WHERE NOT mentions_sorted');
+  if (rows[0].n) {
+    const result = await withTransaction(db, (tx) => sortReturns(tx, { unsortedMentions: true }));
+    console.log(`[aether] found mentions in ${rows[0].n} earlier returns (${result.sorted} sorted, ${result.unsorted} left for review)`);
+  }
+}
 
 if (config.adminPassword) {
   const result = await bootstrapAdmin(db, { email: config.adminEmail, password: config.adminPassword });

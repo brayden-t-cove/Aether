@@ -28,7 +28,7 @@ describe('suggesting flags from a note', () => {
   });
 });
 
-describe.skipIf(!TEST_DATABASE_URL)('flags and secondary categories on returns', () => {
+describe.skipIf(!TEST_DATABASE_URL)('flags and other mentions on returns', () => {
   let db, editor, viewer;
   // Made-up TikTok requests.
   const TIKTOK = [
@@ -88,19 +88,27 @@ describe.skipIf(!TEST_DATABASE_URL)('flags and secondary categories on returns',
     expect(all.body.returns).toEqual([]);
   });
 
-  it('records other problems the buyer mentions, never the main category', async () => {
-    const id = await idOf('FL-2'); // main category: Fit & Installation
-    await viewer.put(`/api/returns/${id}/secondary`).send({ categories: ['performance'] }).expect(403);
-    const res = await editor.put(`/api/returns/${id}/secondary`).send({ categories: ['performance', 'fit', 'no_comment', 'performance'] }).expect(200);
-    expect(res.body.secondary).toEqual(['Performance / Hardware']);
-    expect((await listReturns(db)).find((r) => r.return_ref === 'FL-2').secondary).toEqual(['performance']);
+  it('lets editors add another problem the note mentions, take one away, and re-file one', async () => {
+    const id = await idOf('FL-2'); // "Too big for the porch light": Fit & Installation
+    const mentions = async () => (await listReturns(db)).find((r) => r.return_ref === 'FL-2').mentions.map((m) => `${m.category}/${m.subreason}`);
+    expect(await mentions()).toEqual(['fit/fixture']);
+    const add = { action: 'add', to: { category: 'performance', subreason: 'image_quality' } };
+    await viewer.post(`/api/returns/${id}/mentions`).send(add).expect(403);
+    await editor.post(`/api/returns/${id}/mentions`).send(add).expect(200);
+    expect(await mentions()).toEqual(['fit/fixture', 'performance/image_quality']);
 
-    await editor.put(`/api/returns/${id}/secondary`).send({ categories: ['made_up'] }).expect(400);
-    await editor.put(`/api/returns/${id}/secondary`).send({ categories: 'performance' }).expect(400);
-    await editor.put(`/api/returns/${id}/secondary`).send({ categories: [] }).expect(200);
-    expect((await listReturns(db)).find((r) => r.return_ref === 'FL-2').secondary).toEqual([]);
+    await editor.post(`/api/returns/${id}/mentions`).send({ action: 'add', to: { category: 'no_comment', subreason: 'blank' } }).expect(400);
+    await editor.post(`/api/returns/${id}/mentions`).send({ action: 'nonsense', category: 'fit' }).expect(400);
+    await editor.post(`/api/returns/${id}/mentions`).send({ action: 'dismiss', category: 'shipping' }).expect(400);
+
+    // Re-filed: the fixture mention was really about the mount. The rules don't bring the old one back.
+    await editor.post(`/api/returns/${id}/mentions`).send({ action: 'refile', category: 'fit', to: { category: 'fit', subreason: 'mount' } }).expect(200);
+    expect(await mentions()).toEqual(['fit/mount', 'performance/image_quality']);
+    await editor.post(`/api/returns/${id}/mentions`).send({ action: 'dismiss', category: 'performance' }).expect(200);
+    await editor.post('/api/returns/sort').expect(200);
+    expect(await mentions()).toEqual(['fit/mount']);
 
     const { body } = await viewer.get('/api/activity').expect(200);
-    expect(body.activity.filter((a) => a.action === 'secondary_updated').map((a) => a.changes.categories)).toEqual([[], ['Performance / Hardware']]);
+    expect(body.activity.filter((a) => a.action.startsWith('mention_')).map((a) => a.action)).toEqual(['mention_dismiss', 'mention_refile', 'mention_add']);
   });
 });

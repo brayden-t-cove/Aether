@@ -77,7 +77,7 @@ export function WeekOverWeek({ data }) {
         </div>
         <Coverage data={data} />
         {!groups.length ? (
-          <p className="muted">No returns with a reason in these weeks.</p>
+          <p className="muted">No mentions in these weeks.</p>
         ) : (
           <div className="table-wrap">
             <table aria-label="Units by bucket per week">
@@ -132,7 +132,7 @@ export function WeekOverWeek({ data }) {
           </div>
         )}
         <p className="muted small">
-          Units. ▲ marks a rise of at least 3 units and 50%. Returns with no note or not yet sorted aren't in this table; see Blank notes.{' '}
+          Mentions: a review that names two problems counts in both buckets. ▲ marks a rise of at least 3 and 50%. Reviews with no note or a Generic one aren't in this table; see Blank notes.{' '}
           <button className="link-btn" onClick={() => setShowAll((s) => !s)} aria-pressed={showAll}>
             {showAll ? 'Hide earlier weeks' : `Show all ${data.weeks.length} weeks`}
           </button>
@@ -150,20 +150,20 @@ export function WeekOverWeek({ data }) {
 }
 
 export function ChannelsView({ data }) {
-  const amazon = channelFigures(data.rows.filter((r) => r.channel === 'amazon'));
-  const tiktok = channelFigures(data.rows.filter((r) => r.channel === 'tiktok'));
+  const amazon = channelFigures(data, 'amazon');
+  const tiktok = channelFigures(data, 'tiktok');
   const both = [
     ['amazon', amazon],
     ['tiktok', tiktok],
   ];
   const categories = [...new Set([...Object.keys(amazon.categories), ...Object.keys(tiktok.categories)])]
-    .map((key) => ({ key, label: (amazon.categories[key] || tiktok.categories[key]).label, amazon: amazon.categories[key]?.units || 0, tiktok: tiktok.categories[key]?.units || 0 }))
+    .map((key) => ({ key, label: (amazon.categories[key] || tiktok.categories[key]).label, amazon: amazon.categories[key]?.mentions || 0, tiktok: tiktok.categories[key]?.mentions || 0 }))
     .sort((a, b) => b.amazon + b.tiktok - (a.amazon + a.tiktok));
   const products = productBreakdown(data.rows.filter((r) => r.channel === 'amazon' || r.channel === 'tiktok'));
   const rows = [
     ['Units returned', (f) => f.units],
-    ['Returns', (f) => f.returns],
-    ['Returns with no note', (f) => `${pct(f.blank, f.returns)}%`],
+    ['Reviews', (f) => f.returns],
+    ['Reviews with no note', (f) => `${pct(f.blank, f.returns)}%`],
   ];
 
   return (
@@ -171,7 +171,7 @@ export function ChannelsView({ data }) {
       <section className="card flush">
         <h2 className="pad-h">Amazon vs TikTok</h2>
         <p className="muted small pad-h">
-          {weekLabel(data.weeks[0])} to {weekLabel(data.weeks.at(-1))}. Returns with no note is a share of returns.
+          {weekLabel(data.weeks[0])} to {weekLabel(data.weeks.at(-1))}. Reviews with no note is a share of reviews; buckets count mentions.
         </p>
         <div className="table-wrap">
           <table aria-label="Amazon and TikTok compared">
@@ -211,13 +211,13 @@ export function ChannelsView({ data }) {
         <div className="card flush">
           <h2 className="pad-h">Why products come back</h2>
           {!categories.length ? (
-            <p className="muted pad-h">No returns with a reason in these weeks.</p>
+            <p className="muted pad-h">No mentions in these weeks.</p>
           ) : (
             <div className="table-wrap">
               <table aria-label="Categories by channel">
                 <thead>
                   <tr>
-                    <th>Category</th>
+                    <th>Bucket (mentions)</th>
                     <th className="num">Amazon</th>
                     <th className="num">TikTok</th>
                   </tr>
@@ -227,10 +227,10 @@ export function ChannelsView({ data }) {
                     <tr key={c.key}>
                       <td>{c.label}</td>
                       <td className="num">
-                        {c.amazon} <span className="muted small">({pct(c.amazon, amazon.shareUnits)}%)</span>
+                        {c.amazon} <span className="muted small">({pct(c.amazon, amazon.returns)}% of reviews)</span>
                       </td>
                       <td className="num">
-                        {c.tiktok} <span className="muted small">({pct(c.tiktok, tiktok.shareUnits)}%)</span>
+                        {c.tiktok} <span className="muted small">({pct(c.tiktok, tiktok.returns)}% of reviews)</span>
                       </td>
                     </tr>
                   ))}

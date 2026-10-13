@@ -41,7 +41,9 @@ describe.skipIf(!TEST_DATABASE_URL)('moving returns into the six buckets', () =>
       [ids.blurry],
     );
 
-    await migrate(db, { log: () => {} });
+    // Up to 019 only: 022 later turns these "also about" categories into mentions.
+    for (const m of await listMigrations()) if (m.version === '019') await cp(m.path, join(dir, m.file));
+    await migrate(db, { dir, log: () => {} });
   });
   afterAll(async () => {
     await rm(dir, { recursive: true, force: true });

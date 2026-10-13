@@ -1,7 +1,8 @@
 /**
- * The Returns overview for one calendar month: why returns came back (the six buckets plus Other, and No
- * comment), how many buyers left a comment, what each bucket means, how far the reason picked on the platform
- * matches the buyer's note, each product's returns, and the notes that fit no bucket.
+ * The Returns overview for one calendar month. A review is one buyer's return; its note can mention several
+ * problems, and each mention counts in its bucket. Three counters: reviews, mentions per bucket, and reviews that
+ * mention more than one thing. Also: what each bucket means (and every mention behind it, to check or re-file),
+ * how far the reason picked on the platform matches the note, each product's reviews, and notes that fit no bucket.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -15,13 +16,15 @@ import { commonPhrases } from '../lib/phrases.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import { Donut, HBars, StackedColumns } from '../components/Charts.jsx';
 
-const units = (n) => `${n} ${n === 1 ? 'unit' : 'units'}`;
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const reviewsText = (n) => count(n, 'review', 'reviews');
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 const SERIES = [
   { key: 'amazon', label: 'Amazon', color: '--series-1' },
   { key: 'tiktok', label: 'TikTok', color: '--series-2' },
   { key: 'other', label: 'Other', color: '--series-3' },
 ];
+const GENERIC = { key: 'generic', color: '--series-generic' };
 
 function Chevron({ open }) {
   return (
@@ -70,7 +73,7 @@ function Definition({ bucket, onSaved }) {
   ) : null;
 }
 
-/** The word the rules matched, from category_why ('note matched: "connect"'), marked in the note. */
+/** The word the rules matched, from why ('note matched: "connect"'), marked in the note. */
 function Highlighted({ note, why }) {
   const word = /note matched: "(.+)"/.exec(why || '')?.[1];
   const at = word ? note.toLowerCase().indexOf(word.toLowerCase()) : -1;
@@ -84,65 +87,90 @@ function Highlighted({ note, why }) {
   );
 }
 
-/** One return in a sub-reason: its note with the matched word marked, and for editors, confirm or re-file. */
-function FiledReturn({ r, bucketKey, options, onChanged }) {
+/** A picker of every bucket's sub-reasons, as "category/subreason" values. */
+function SubreasonSelect({ options, value, onChange, label, exclude, disabled }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} disabled={disabled}>
+      <option value="">{label}…</option>
+      {options.map((c) => (
+        <optgroup key={c.key} label={c.name}>
+          {c.subreasons
+            .filter((s) => `${c.key}/${s.key}` !== exclude)
+            .map((s) => (
+              <option key={s.key} value={`${c.key}/${s.key}`}>
+                {s.name}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * One review, as it sits in a bucket: the note with the matched word marked, its other mentions, and for editors
+ * the actions on this mention (right, not about this, re-file) or on the review (add a mention).
+ */
+function MentionedReview({ r, bucketKey, options, onChanged }) {
   const { can } = useAuth();
-  const [to, setTo] = useState('');
+  const [refile, setRefile] = useState('');
+  const [also, setAlso] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const checked = r.reviewed_at || r.category_source === 'manual';
-  const file = async (value) => {
-    const [category, subreason] = value.split('/');
+  const mention = r.mentions.find((m) => m.category === bucketKey);
+  const others = r.mentions.filter((m) => m.category !== bucketKey);
+  const note = mention?.note || r.note_clean;
+  const act = async (action, value) => {
+    const [category, subreason] = (value || '').split('/');
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/returns/${r.id}/category`, { method: 'PATCH', body: { category, subreason } });
+      await api(`/api/returns/${r.id}/mentions`, { method: 'POST', body: { action, category: mention?.category, to: value ? { category, subreason } : undefined } });
       await onChanged();
     } catch (err) {
       setError(err);
       setBusy(false);
     }
   };
+  const status = mention ? (mention.checked ? (mention.source === 'manual' && !mention.why ? 'Filed by hand' : 'Checked') : null) : r.category_key === 'generic' ? 'Generic' : 'Not filed yet';
+
   return (
-    <li className={`note-item filed-return ${checked ? 'is-checked' : ''}`}>
+    <li className={`note-item filed-return ${mention?.checked ? 'is-checked' : ''}`}>
       <p className="note-text">
-        “<Highlighted note={r.note_clean} why={r.category_why} />”
+        “<Highlighted note={note} why={mention?.why} />”
       </p>
       <p className="muted small">
         {formatDate(r.return_date)} · {CHANNELS[r.channel]}
         {r.product_name && ` · ${r.product_name}`}
         {r.reason && ` · Picked: ${r.reason}`}
         {r.quantity > 1 && ` · ${r.quantity} units`}
-        {checked ? (
-          <span className="tag checked-tag">{r.category_source === 'manual' && r.category_why === '' ? 'Filed by hand' : 'Checked'}</span>
-        ) : (
-          r.category_why && <span className="muted"> · {r.category_why}</span>
-        )}
+        {status ? <span className={`tag ${mention?.checked ? 'checked-tag' : 'note-unfiled'}`}>{status}</span> : mention?.why && <span className="muted"> · {mention.why}</span>}
       </p>
+      {others.length > 0 && <p className="small also-mentions">Also mentions: {others.map((m) => m.category_name).join(', ')}</p>}
       <ErrorNote error={error} />
       {can('editor') && (
         <div className="row filed-actions">
-          {!checked && r.category_key && (
-            <button className="btn small" onClick={() => file(`${r.category_key}/${r.subreason_key}`)} disabled={busy}>
+          {mention && !mention.checked && (
+            <button className="btn small" onClick={() => act('check')} disabled={busy}>
               Looks right
             </button>
           )}
-          <select value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} aria-label={`Re-file the return from ${formatDate(r.return_date)}`}>
-            <option value="">Re-file as…</option>
-            {options.map((c) => (
-              <optgroup key={c.key} label={c.name}>
-                {c.subreasons
-                  .filter((s) => !(c.key === bucketKey && s.key === r.subreason_key))
-                  .map((s) => (
-                    <option key={s.key} value={`${c.key}/${s.key}`}>
-                      {s.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
-          <button className="btn small" onClick={() => file(to)} disabled={!to || busy}>
-            Re-file
+          {mention && (
+            <button className="btn ghost small" onClick={() => act('dismiss')} disabled={busy}>
+              Not about this
+            </button>
+          )}
+          {mention ? (
+            <>
+              <SubreasonSelect options={options} value={refile} onChange={setRefile} label="Re-file as" exclude={`${mention.category}/${mention.subreason}`} disabled={busy} />
+              <button className="btn small" onClick={() => act('refile', refile)} disabled={!refile || busy}>
+                Re-file
+              </button>
+            </>
+          ) : null}
+          <SubreasonSelect options={options} value={also} onChange={setAlso} label={mention ? 'Also mentions' : 'File as'} disabled={busy} />
+          <button className="btn small" onClick={() => act('add', also)} disabled={!also || busy}>
+            {mention ? 'Add' : 'File'}
           </button>
         </div>
       )}
@@ -150,9 +178,9 @@ function FiledReturn({ r, bucketKey, options, onChanged }) {
   );
 }
 
-/** A sub-reason's returns this month, unchecked first, so each call can be confirmed or corrected. */
-function SubreasonReturns({ bucketKey, subreason, query, options, onChanged }) {
-  const params = new URLSearchParams({ ...query, bucket: bucketKey, subreason, limit: '1000' });
+/** A sub-reason's (or a group's) reviews this month, unchecked first, so each call can be confirmed or corrected. */
+function MentionList({ bucketKey, subreason, query, options, onChanged }) {
+  const params = new URLSearchParams({ ...query, bucket: bucketKey, ...(subreason && { subreason }), limit: '1000' });
   const { data, error, reload } = useLoad(`/api/returns?${params}`);
   const [all, setAll] = useState(false);
   const changed = async () => {
@@ -161,13 +189,14 @@ function SubreasonReturns({ bucketKey, subreason, query, options, onChanged }) {
   };
   if (error) return <ErrorNote error={error} />;
   if (!data) return <p className="muted small">Loading…</p>;
-  const isChecked = (r) => r.reviewed_at || r.category_source === 'manual';
+  const isChecked = (r) => r.mentions.find((m) => m.category === bucketKey)?.checked;
   const list = [...data.returns].sort((a, b) => Number(Boolean(isChecked(a))) - Number(Boolean(isChecked(b))));
+  if (!list.length) return <p className="muted small">None this month.</p>;
   return (
     <div className="subreason-returns">
       <ul className="note-list">
         {(all ? list : list.slice(0, 15)).map((r) => (
-          <FiledReturn key={r.id} r={r} bucketKey={bucketKey} options={options} onChanged={changed} />
+          <MentionedReview key={r.id} r={r} bucketKey={bucketKey} options={options} onChanged={changed} />
         ))}
       </ul>
       {!all && list.length > 15 && (
@@ -179,12 +208,12 @@ function SubreasonReturns({ bucketKey, subreason, query, options, onChanged }) {
   );
 }
 
-/** A bucket's sub-reasons with their units and how many are checked; each opens to its returns. */
+/** A bucket's sub-reasons with their mentions and how many are checked; each opens to its reviews. */
 function SubreasonList({ bucket, query, options, onChanged }) {
   const [open, setOpen] = useState(null);
-  const subs = bucket.subreasons.filter((s) => s.units);
-  if (!subs.length) return <p className="muted small">No returns in this bucket this month.</p>;
-  const max = Math.max(...subs.map((s) => s.units));
+  const subs = bucket.subreasons.filter((s) => s.mentions);
+  if (!subs.length) return <p className="muted small">No mentions this month.</p>;
+  const max = Math.max(...subs.map((s) => s.mentions));
   return (
     <ul className="subreason-list" aria-label={`${bucket.name} by sub-reason`}>
       {subs.map((s) => {
@@ -195,47 +224,14 @@ function SubreasonList({ bucket, query, options, onChanged }) {
               <Chevron open={isOpen} />
               <span className="subreason-name">{s.name}</span>
               <span className="hbar-track">
-                <span className="hbar-fill" style={{ width: `${(s.units / max) * 100}%`, background: `var(${bucket.color})` }} />
+                <span className="hbar-fill" style={{ width: `${(s.mentions / max) * 100}%`, background: `var(${bucket.color})` }} />
               </span>
-              <span className="subreason-value">{s.units}</span>
-              <span className={`subreason-checked small ${s.checked_units >= s.units ? 'all-checked' : ''}`}>
-                {s.checked_units} of {s.units} checked
-              </span>
-            </button>
-            {isOpen && <SubreasonReturns bucketKey={bucket.key} subreason={s.key} query={query} options={options} onChanged={onChanged} />}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/** The key: each bucket with its definition, units and share; opening one shows its sub-reasons. */
-function BucketKey({ buckets, totals, onSaved, query, options, onChanged }) {
-  const [open, setOpen] = useState(null);
-  return (
-    <ul className="bucket-key">
-      {buckets.map((b) => {
-        const isOpen = open === b.key;
-        return (
-          <li key={b.key} className={`bucket ${isOpen ? 'is-open' : ''}`}>
-            <button className="bucket-head" onClick={() => setOpen(isOpen ? null : b.key)} aria-expanded={isOpen}>
-              <Chevron open={isOpen} />
-              <span className="legend-swatch" style={{ background: `var(${b.color})` }} aria-hidden="true" />
-              <span className="bucket-name">
-                {b.name}
-                <span className="bucket-definition">{b.description}</span>
-              </span>
-              <span className="bucket-value">
-                {b.units} <span className="muted">· {pct(b.units, totals.units)}%</span>
+              <span className="subreason-value">{s.mentions}</span>
+              <span className={`subreason-checked small ${s.checked >= s.mentions ? 'all-checked' : ''}`}>
+                {s.checked} of {s.mentions} checked
               </span>
             </button>
-            {isOpen && (
-              <div className="bucket-body">
-                <Definition bucket={b} onSaved={onSaved} />
-                <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />
-              </div>
-            )}
+            {isOpen && <MentionList bucketKey={bucket.key} subreason={s.key} query={query} options={options} onChanged={onChanged} />}
           </li>
         );
       })}
@@ -244,48 +240,104 @@ function BucketKey({ buckets, totals, onSaved, query, options, onChanged }) {
 }
 
 /**
- * How far the reason picked on the platform matches what the buyer wrote. Only returns whose note says what
- * went wrong count (not Other), and only platform reasons that point to a bucket can agree or disagree.
+ * The key: each bucket with its definition, mentions and the share of reviews that mention it; opening one shows
+ * its sub-reasons. Below, the two groups that aren't mentions: Generic and No Comment.
+ */
+function BucketKey({ buckets, groups, totals, onSaved, query, options, onChanged }) {
+  const [open, setOpen] = useState(null);
+  const row = (b, value, share, body) => {
+    const isOpen = open === b.key;
+    return (
+      <li key={b.key} className={`bucket ${isOpen ? 'is-open' : ''} ${b.group ? 'bucket-group' : ''}`}>
+        <button className="bucket-head" onClick={() => setOpen(isOpen ? null : b.key)} aria-expanded={isOpen}>
+          <Chevron open={isOpen} />
+          <span className="legend-swatch" style={{ background: `var(${b.color})` }} aria-hidden="true" />
+          <span className="bucket-name">
+            {b.name}
+            <span className="bucket-definition">{b.description}</span>
+          </span>
+          <span className="bucket-value">
+            {value} <span className="muted">· {share}</span>
+          </span>
+        </button>
+        {isOpen && (
+          <div className="bucket-body">
+            <Definition bucket={b} onSaved={onSaved} />
+            {body}
+          </div>
+        )}
+      </li>
+    );
+  };
+  return (
+    <ul className="bucket-key">
+      {buckets.map((b) =>
+        row(b, count(b.mentions, 'mention', 'mentions'), `${pct(b.mentions, totals.reviews)}% of reviews`, <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />),
+      )}
+      {groups.map((g) =>
+        row(
+          g,
+          reviewsText(g.reviews),
+          `${pct(g.reviews, totals.reviews)}%`,
+          g.key === 'generic' ? (
+            <>
+              <p className="muted small">Reviews that say nothing specific. File one under a bucket if it does say what went wrong.</p>
+              <MentionList bucketKey="generic" query={query} options={options} onChanged={onChanged} />
+            </>
+          ) : (
+            <p className="muted small">Nothing to read: the buyer left no note of their own.</p>
+          ),
+        ),
+      )}
+    </ul>
+  );
+}
+
+/**
+ * How far the reason picked on the platform matches what the buyer wrote. Only reviews whose note says what went
+ * wrong count (a bucket, not just Other), and only platform reasons that point to a bucket can agree or disagree.
+ * A review agrees when any of its mentions is a bucket its platform reason points to.
  */
 function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
   const name = Object.fromEntries(buckets.map((b) => [b.key, b.name]));
   const byReason = new Map();
   for (const r of rows) {
-    if (r.bucket === OTHER_BUCKET) continue;
-    const e = byReason.get(r.reason) || { reason: r.reason, units: 0, agree: 0, buckets: {}, expected: expectedBuckets(r.reason) };
-    e.units += r.units;
-    e.buckets[r.bucket] = (e.buckets[r.bucket] || 0) + r.units;
-    if (e.expected.includes(r.bucket)) e.agree += r.units;
+    const said = r.buckets.filter((b) => b !== OTHER_BUCKET);
+    if (!said.length) continue;
+    const e = byReason.get(r.reason) || { reason: r.reason, reviews: 0, agree: 0, buckets: {}, expected: expectedBuckets(r.reason) };
+    e.reviews += 1;
+    for (const b of said) e.buckets[b] = (e.buckets[b] || 0) + 1;
+    if (said.some((b) => e.expected.includes(b))) e.agree += 1;
     byReason.set(r.reason, e);
   }
-  const reasons = [...byReason.values()].sort((a, b) => b.units - a.units);
+  const reasons = [...byReason.values()].sort((a, b) => b.reviews - a.reviews);
   const claimed = reasons.filter((r) => r.expected.length);
-  const claimUnits = claimed.reduce((n, r) => n + r.units, 0);
-  const agreeUnits = claimed.reduce((n, r) => n + r.agree, 0);
-  const noClaim = reasons.filter((r) => !r.expected.length).reduce((n, r) => n + r.units, 0);
+  const claimReviews = claimed.reduce((n, r) => n + r.reviews, 0);
+  const agreeReviews = claimed.reduce((n, r) => n + r.agree, 0);
+  const noClaim = reasons.filter((r) => !r.expected.length).reduce((n, r) => n + r.reviews, 0);
   const topPlatform = topReasons[0];
-  const topBucket = buckets.filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.units - a.units)[0];
-  if (!reasons.length) return <p className="muted">No returns with a clear note this month.</p>;
+  const topBucket = buckets.filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
+  if (!reasons.length) return <p className="muted">No reviews with a clear note this month.</p>;
 
   return (
     <>
       <div className="variance-headline">
         <div className="stat">
           <span className="stat-label">Platform reason matches the note</span>
-          <span className="stat-value">{pct(agreeUnits, claimUnits)}%</span>
+          <span className="stat-value">{pct(agreeReviews, claimReviews)}%</span>
           <span className="stat-hint">
-            {agreeUnits} of {units(claimUnits)} where both say what went wrong
+            {agreeReviews} of {reviewsText(claimReviews)} where both say what went wrong
           </span>
         </div>
         <div className="stat stat-overdue">
           <span className="stat-label">Margin of error</span>
-          <span className="stat-value">{claimUnits ? 100 - pct(agreeUnits, claimUnits) : 0}%</span>
+          <span className="stat-value">{claimReviews ? 100 - pct(agreeReviews, claimReviews) : 0}%</span>
           <span className="stat-hint">Picked a reason their own note contradicts</span>
         </div>
-        {topPlatform && topBucket && (
+        {topPlatform && topBucket?.mentions > 0 && (
           <p className="variance-story">
-            On the platform, the top reason is <strong>{topPlatform.reason || topPlatform.reason_code}</strong> ({pct(topPlatform.units, totals.units)}% of
-            returns). In the buyers’ own words, it’s <strong>{topBucket.name}</strong> ({pct(topBucket.units, totals.units)}%).
+            On the platform, the top reason is <strong>{topPlatform.reason || topPlatform.reason_code}</strong> ({pct(topPlatform.reviews, totals.reviews)}% of
+            reviews). In the buyers’ own words, it’s <strong>{topBucket.name}</strong> (mentioned in {pct(topBucket.mentions, totals.reviews)}% of reviews).
           </p>
         )}
       </div>
@@ -294,9 +346,9 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
           <thead>
             <tr>
               <th>Reason picked on the platform</th>
-              <th className="num">Units with a clear note</th>
+              <th className="num">Reviews with a clear note</th>
               <th className="num">Note agrees</th>
-              <th>What the notes say</th>
+              <th>What the notes mention</th>
             </tr>
           </thead>
           <tbody>
@@ -306,13 +358,13 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
                   {r.reason}
                   {r.expected.length > 0 && <div className="muted small">Points to {r.expected.map((k) => name[k]).join(' or ')}</div>}
                 </td>
-                <td className="num">{r.units}</td>
-                <td className="num">{r.expected.length ? `${pct(r.agree, r.units)}%` : <span className="muted" title="This reason doesn't point to a bucket">—</span>}</td>
+                <td className="num">{r.reviews}</td>
+                <td className="num">{r.expected.length ? `${pct(r.agree, r.reviews)}%` : <span className="muted" title="This reason doesn't point to a bucket">—</span>}</td>
                 <td className="small">
                   {Object.entries(r.buckets)
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 3)
-                    .map(([k, u]) => `${name[k]} ${pct(u, r.units)}%`)
+                    .map(([k, n]) => `${name[k]} ${pct(n, r.reviews)}%`)
                     .join(' · ')}
                 </td>
               </tr>
@@ -321,18 +373,21 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
         </table>
       </div>
       <p className="muted small">
-        Counts returns whose note says what went wrong (not Other or No comment). A reason like “Defective item” agrees with a note about connectivity or
-        performance; “No longer needed” only with Changed Mind.{noClaim > 0 && ` ${units(noClaim)} had a platform reason that doesn’t point anywhere (“Not as described”, “No reason given”) and aren’t in the percentage.`}
+        Counts reviews whose note says what went wrong (not only Other, Generic or No comment). A review agrees when any problem it mentions fits its
+        platform reason: “Defective item” fits connectivity or performance; “No longer needed” only Changed Mind. A review that mentions two buckets counts
+        in both on the right.
+        {noClaim > 0 && ` ${reviewsText(noClaim)} had a platform reason that doesn’t point anywhere (“Not as described”, “No reason given”) and aren’t in the percentage.`}
       </p>
     </>
   );
 }
 
-/** One return's note, with where it came from. */
-function Note({ r, showProduct }) {
+/** One review's note, with where it came from. */
+function Note({ r, showProduct, bucketKey }) {
+  const mention = bucketKey && r.mentions.find((m) => m.category === bucketKey);
   return (
     <li className="note-item">
-      <p className="note-text">“{r.note_clean}”</p>
+      <p className="note-text">“{mention?.note || r.note_clean}”</p>
       <p className="muted small">
         {formatDate(r.return_date)} · {CHANNELS[r.channel]}
         {showProduct && r.product_name && ` · ${r.product_name}`}
@@ -344,12 +399,13 @@ function Note({ r, showProduct }) {
   );
 }
 
-/** Notes grouped by bucket, the latest few of each, with the rest on request. */
+// The buckets a review is listed under: its mentions, or Other while nobody has filed it, or Generic.
+const bucketsOf = (r) => (r.mentions.length ? r.mentions.map((m) => m.category) : r.category_key === 'generic' ? ['generic'] : !r.category_key ? [OTHER_BUCKET] : []);
+
+/** Reviews grouped by bucket (a review that mentions two is under both), the latest few of each, with the rest on request. */
 function NotesByBucket({ notes, buckets }) {
   const [all, setAll] = useState({});
-  const groups = buckets
-    .map((b) => ({ ...b, notes: notes.filter((n) => (n.category_key || OTHER_BUCKET) === b.key) }))
-    .filter((g) => g.notes.length);
+  const groups = buckets.map((b) => ({ ...b, notes: notes.filter((n) => bucketsOf(n).includes(b.key)) })).filter((g) => g.notes.length);
   if (!groups.length) return <p className="muted small">No notes from buyers for this product this month.</p>;
   return groups.map((g) => (
     <div key={g.key} className="note-group">
@@ -358,7 +414,7 @@ function NotesByBucket({ notes, buckets }) {
       </h4>
       <ul className="note-list">
         {(all[g.key] ? g.notes : g.notes.slice(0, 10)).map((n) => (
-          <Note key={n.id} r={n} />
+          <Note key={n.id} r={n} bucketKey={g.key} />
         ))}
       </ul>
       {g.notes.length > 10 && !all[g.key] && (
@@ -370,13 +426,12 @@ function NotesByBucket({ notes, buckets }) {
   ));
 }
 
-/** A product's row; opening it shows that camera's buckets and its buyers' notes for the month. */
-function ProductRow({ p, buckets, productBuckets, query }) {
+/** A product's row; opening it shows that camera's mentions and its buyers' notes for the month. */
+function ProductRow({ p, buckets, groups, productBuckets, query }) {
   const [open, setOpen] = useState(false);
   const notes = useLoad(open && p.product_id ? `/api/returns?${new URLSearchParams({ ...query, productId: p.product_id, noted: '1', limit: '1000' })}` : null);
-  const mine = buckets.map((b) => ({ ...b, units: productBuckets.find((x) => x.product_id === p.product_id && x.bucket === b.key)?.units || 0 }));
-  const explained = mine.reduce((n, b) => n + b.units, 0);
-  const top = [...mine].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.units - a.units)[0];
+  const mine = buckets.map((b) => ({ ...b, mentions: productBuckets.find((x) => x.product_id === p.product_id && x.bucket === b.key)?.mentions || 0 }));
+  const top = [...mine].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
   return (
     <>
       <tr className={`product-row ${open ? 'is-open' : ''}`}>
@@ -390,35 +445,35 @@ function ProductRow({ p, buckets, productBuckets, query }) {
           )}
           {p.model && <div className="muted small product-model">{p.model}</div>}
         </td>
+        <td className="num">{p.reviews}</td>
         <td className="num">{p.units}</td>
         <td className="num">
-          {pct(p.noted_units, p.units)}% <span className="muted small">({p.noted_units})</span>
+          {pct(p.noted_reviews, p.reviews)}% <span className="muted small">({p.noted_reviews})</span>
         </td>
-        <td className="small">{top?.units ? top.name : '—'}</td>
+        <td className="small">{top?.mentions ? top.name : '—'}</td>
       </tr>
       {open && (
         <tr className="product-detail">
-          <td colSpan={4}>
+          <td colSpan={5}>
             <div className="product-detail-body">
               <div>
-                <h4>Why it came back</h4>
-                {explained ? (
+                <h4>What its reviews mention</h4>
+                {mine.some((b) => b.mentions) ? (
                   <HBars
                     ariaLabel={`${p.name} by bucket`}
-                    data={mine.filter((b) => b.units).map((b) => ({ label: b.name, value: b.units, share: pct(b.units, p.units), color: b.color }))}
+                    data={mine.filter((b) => b.mentions).map((b) => ({ label: b.name, value: b.mentions, share: pct(b.mentions, p.reviews), color: b.color }))}
                   />
                 ) : (
                   <p className="muted small">No notes that say why.</p>
                 )}
                 <p className="muted small">
-                  {p.units - explained > 0 && `${units(p.units - explained)} with no comment. `}
-                  <Link to={`/products/${p.product_id}`}>Open product</Link>
+                  % of this product’s {reviewsText(p.reviews)}. <Link to={`/products/${p.product_id}`}>Open product</Link>
                 </p>
               </div>
               <div>
                 <h4>What buyers wrote</h4>
                 <ErrorNote error={notes.error} />
-                {!notes.data ? !notes.error && <p className="muted small">Loading…</p> : <NotesByBucket notes={notes.data.returns} buckets={buckets} />}
+                {!notes.data ? !notes.error && <p className="muted small">Loading…</p> : <NotesByBucket notes={notes.data.returns} buckets={[...buckets, ...groups.filter((g) => g.key === 'generic')]} />}
               </div>
             </div>
           </td>
@@ -435,16 +490,17 @@ function OtherSection({ query }) {
   const [phrase, setPhrase] = useState(null);
   const [all, setAll] = useState(false);
   const notes = useMemo(() => data?.returns || [], [data]);
-  const phrases = useMemo(() => commonPhrases(notes.map((n) => n.note_clean)), [notes]);
-  const matches = phrase ? notes.filter((n) => new RegExp(`\\b${phrase.replace(/ /g, "[’']?\\W*")}\\b`, 'i').test(n.note_clean.replace(/[’']/g, ''))) : notes;
+  const text = (n) => n.mentions.find((m) => m.category === OTHER_BUCKET)?.note || n.note_clean;
+  const phrases = useMemo(() => commonPhrases(notes.map((n) => n.mentions.find((m) => m.category === OTHER_BUCKET)?.note || n.note_clean)), [notes]);
+  const matches = phrase ? notes.filter((n) => new RegExp(`\\b${phrase.replace(/ /g, "[’']?\\W*")}\\b`, 'i').test(text(n).replace(/[’']/g, ''))) : notes;
   const unfiled = notes.filter((n) => !n.category_key).length;
 
   return (
     <section className="card" aria-labelledby="other-heading">
       <h2 id="other-heading">Other: notes that fit no bucket</h2>
       <p className="muted small">
-        What buyers wrote that isn’t connectivity, fit, subscription, performance, shipping or a change of mind, to spot themes worth a bucket or a
-        product change.
+        Specific points that aren’t connectivity, fit, subscription, performance, shipping or a change of mind, to spot themes worth a bucket or a
+        product change. Notes that say nothing specific are under Generic instead.
         {unfiled > 0 && can('editor') && (
           <>
             {' '}
@@ -474,7 +530,7 @@ function OtherSection({ query }) {
           <h3>{phrase ? `Notes mentioning “${phrase}” (${matches.length})` : `All notes (${notes.length})`}</h3>
           <ul className="note-list">
             {(all || phrase ? matches : matches.slice(0, 10)).map((n) => (
-              <Note key={n.id} r={n} showProduct />
+              <Note key={n.id} r={n} showProduct bucketKey={OTHER_BUCKET} />
             ))}
           </ul>
           {!phrase && !all && matches.length > 10 && (
@@ -496,17 +552,21 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
     const subs = data.bySubreason.filter((s) => s.bucket === b.key);
     const subreasons = c.subreasons.map((s) => {
       const row = subs.find((x) => x.key === s.key);
-      return { ...s, units: row?.units || 0, checked_units: row?.checked_units || 0 };
+      return { ...s, mentions: row?.mentions || 0, checked: row?.checked || 0 };
     });
-    // Other also holds notes nobody has filed yet.
-    const unfiled = subs.filter((s) => !s.key).reduce((n, s) => n + s.units, 0);
-    if (unfiled) subreasons.push({ key: 'unfiled', name: 'Not filed yet', units: unfiled, checked_units: 0 });
-    return { ...b, name: c.name, description: c.description, subreasons, units: subs.reduce((n, s) => n + s.units, 0) };
+    // Other also holds notes nobody has filed yet; mentions a person carried over without a sub-reason sit apart.
+    for (const extra of subs.filter((s) => !c.subreasons.some((x) => x.key === s.key))) {
+      subreasons.push({ key: extra.key ?? '', name: extra.name || 'No sub-reason', mentions: extra.mentions, checked: extra.checked });
+    }
+    return { ...b, name: c.name, description: c.description, subreasons, mentions: subs.reduce((n, s) => n + s.mentions, 0) };
   });
-  const noComment = codebook.find((c) => c.key === 'no_comment');
-  const bucketed = buckets.reduce((n, b) => n + b.units, 0);
-  const blankSlice = t.units - bucketed;
-  const top = [...buckets].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.units - a.units)[0];
+  const group = (key, color, reviews) => {
+    const c = codebook.find((x) => x.key === key) || { name: key, description: '' };
+    return { key, color, group: true, name: c.name, description: c.description, reviews };
+  };
+  const groups = [group('generic', GENERIC.color, t.generic_reviews), group('no_comment', '--series-blank', t.no_comment_reviews)];
+  const options = codebook.filter((c) => c.in_share);
+  const top = [...buckets].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
 
   const months = [...new Set(data.byMonth.map((r) => r.month))].sort();
   const columns = months.map((m) => {
@@ -523,21 +583,30 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
     <>
       <section className="stats" aria-label="Summary">
         <div className="stat">
-          <span className="stat-label">Units returned</span>
-          <span className="stat-value">{t.units}</span>
-          <span className="stat-hint">{monthName}</span>
+          <span className="stat-label">Reviews</span>
+          <span className="stat-value">{t.reviews}</span>
+          <span className="stat-hint">
+            {monthName} · {count(t.units, 'unit', 'units')} returned
+          </span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">Mentioned more than one thing</span>
+          <span className="stat-value">{t.multi_reviews}</span>
+          <span className="stat-hint">
+            {pct(t.multi_reviews, t.mentioning_reviews)}% of the {reviewsText(t.mentioning_reviews)} that say what went wrong
+          </span>
         </div>
         <div className="stat">
           <span className="stat-label">Left a comment</span>
-          <span className="stat-value">{pct(t.noted_units, t.units)}%</span>
+          <span className="stat-value">{pct(t.noted_reviews, t.reviews)}%</span>
           <span className="stat-hint">
-            {t.noted_units} of {units(t.units)}
+            {t.noted_reviews} of {reviewsText(t.reviews)}
           </span>
         </div>
         <div className="stat">
           <span className="stat-label">Top bucket</span>
-          <span className="stat-value stat-text">{top?.units ? top.name : '—'}</span>
-          <span className="stat-hint">{top?.units ? `${units(top.units)} · ${pct(top.units, t.units)}%` : ''}</span>
+          <span className="stat-value stat-text">{top?.mentions ? top.name : '—'}</span>
+          <span className="stat-hint">{top?.mentions ? `mentioned in ${pct(top.mentions, t.reviews)}% of reviews` : ''}</span>
         </div>
         <div className={`stat ${t.unmatched_units ? 'stat-overdue' : ''}`}>
           <span className="stat-label">Not matched to a product</span>
@@ -550,62 +619,60 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
         <div className="card">
           <h2>Why returns came back</h2>
           <Donut
-            ariaLabel="Units by bucket, and with no comment"
-            center={t.units}
-            centerLabel="units"
+            ariaLabel="Mentions by bucket, with Generic and No comment reviews"
+            center={t.reviews}
+            centerLabel="reviews"
             data={[
-              ...buckets.map((b) => ({ key: b.key, label: b.name, value: b.units, color: b.color })),
-              { key: 'no_comment', label: noComment?.name || 'No comment', value: blankSlice, color: '--series-blank' },
+              ...buckets.map((b) => ({ key: b.key, label: b.name, value: b.mentions, color: b.color })),
+              ...groups.map((g) => ({ key: g.key, label: g.name, value: g.reviews, color: g.color })),
             ]}
           />
-          <p className="muted small">From what buyers wrote in their own words. No comment: they left nothing beyond the platform’s menu.</p>
+          <p className="muted small">
+            Each problem a buyer mentions counts in its bucket, so a review that names two counts in both ({t.mentions} mentions from{' '}
+            {reviewsText(t.mentioning_reviews)}). Generic and No Comment count reviews.
+          </p>
         </div>
         <div className="card">
           <h2>Comment left vs blank</h2>
           <Donut
-            ariaLabel="Returns with a comment and without"
-            center={`${pct(t.noted_units, t.units)}%`}
+            ariaLabel="Reviews with a comment and without"
+            center={`${pct(t.noted_reviews, t.reviews)}%`}
             centerLabel="left a comment"
             data={[
-              { key: 'noted', label: 'Left a comment', value: t.noted_units, color: '--series-1' },
-              { key: 'blank', label: 'Left it blank', value: t.blank_units, color: '--series-blank' },
+              { key: 'noted', label: 'Left a comment', value: t.noted_reviews, color: '--series-1' },
+              { key: 'blank', label: 'Left it blank', value: t.blank_reviews, color: '--series-blank' },
             ]}
           />
-          <p className="muted small">Blank includes notes that only repeat the menu choice, “N/A” and the like.</p>
+          <p className="muted small">Reviews. Blank includes notes that only repeat the menu choice, “N/A” and the like.</p>
         </div>
       </section>
 
       <section className="card">
         <h2>The buckets and what they mean</h2>
         <p className="muted small">
-          How a return lands in a bucket: samples and returns that never reached a customer are set aside first. Then the buyer’s own words (not the reason
-          they picked on the platform) are matched against each bucket’s keywords, in a fixed order when a note fits more than one. Notes the rules can’t
-          place go to Other until someone files them, and anyone can file or correct a return on the Review page. Open a bucket for its sub-reasons.
+          How a review is counted: samples and returns that never reached a customer are set aside first. Then the buyer’s own words (not the reason they
+          picked on the platform; for an Amazon order, every unit’s comment) are matched against each bucket’s keywords, and every bucket the note mentions
+          counts once. A change of mind counts only when nothing else is mentioned. A note that says nothing specific is Generic. Notes the rules can’t place
+          go to Other until someone files them. Open a bucket for its sub-reasons, and a sub-reason for every review behind it.
         </p>
-        <BucketKey
-          buckets={buckets}
-          totals={t}
-          onSaved={onCodebookChanged}
-          query={query}
-          options={codebook.filter((c) => c.in_share || c.key === 'no_comment')}
-          onChanged={onReturnsChanged}
-        />
+        <BucketKey buckets={buckets} groups={groups} totals={t} onSaved={onCodebookChanged} query={query} options={options} onChanged={onReturnsChanged} />
       </section>
 
       <section className="card">
         <h2>Platform reason vs the buyer’s note</h2>
         <p className="muted small">How far the reason buyers pick on the platform can be trusted, judged against what their own note says.</p>
-        <PlatformVsNotes rows={data.reasonVsBucket} topReasons={data.topReasons} buckets={buckets} totals={t} />
+        <PlatformVsNotes rows={data.reviewBuckets} topReasons={data.topReasons} buckets={buckets} totals={t} />
       </section>
 
       <section className="card flush">
         <h2 className="pad-h">By product</h2>
-        <p className="muted small pad-h">Open a camera to see why it came back and what its buyers wrote this month.</p>
+        <p className="muted small pad-h">Open a camera to see what its reviews mention and what its buyers wrote this month.</p>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Product</th>
+                <th className="num">Reviews</th>
                 <th className="num">Units</th>
                 <th className="num">Left a comment</th>
                 <th>Top bucket</th>
@@ -613,7 +680,7 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
             </thead>
             <tbody>
               {data.byProduct.map((p) => (
-                <ProductRow key={p.product_id || 'unmatched'} p={p} buckets={buckets} productBuckets={data.productBuckets} query={query} />
+                <ProductRow key={p.product_id || 'unmatched'} p={p} buckets={buckets} groups={groups} productBuckets={data.productBuckets} query={query} />
               ))}
             </tbody>
           </table>

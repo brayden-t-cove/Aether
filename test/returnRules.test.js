@@ -7,6 +7,8 @@ import { makeApp, setupDb, signedInAgent, TEST_DATABASE_URL } from './helpers.js
 const rank = new Map(
   ['shipping', 'connectivity', 'subscription', 'fit', 'performance', 'changed_mind', 'non_specific'].map((k, i) => [k, i + 1]),
 );
+const mentioned = (customer_comment, extra = {}) =>
+  sortReturn({ channel: 'tiktok', customer_comment, ...extra }, { rank }).mentions.map((m) => `${m.category}/${m.subreason}`);
 const sort = (customer_comment, extra = {}) => {
   const r = sortReturn({ channel: 'tiktok', customer_comment, ...extra }, { rank });
   return r.category ? `${r.category}/${r.subreason}` : null;
@@ -55,16 +57,52 @@ describe('sorting a return', () => {
     expect(sort('Only works on the 2.4 GHz band')).toBe('connectivity/router_isp');
   });
 
-  it('breaks ties in codebook order', () => {
-    // changed mind + connectivity → connectivity; shipping beats everything.
-    expect(sort("Don't need it anymore, and it would not connect")).toBe('connectivity/wont_connect');
-    expect(sort('Never received it, and the reviews say it drops offline')).toBe('shipping/not_received');
-    // fit beats performance; performance beats hardware.
-    expect(sort('Too big for the porch light and the picture is blurry')).toBe('fit/fixture');
-    expect(sort('Night vision is poor and one stopped working')).toBe('performance/image_quality');
-    // a vague "doesn't work" only counts when nothing more specific is said.
-    expect(sort("Doesn't work")).toBe('non_specific/vague');
-    expect(sort("Doesn't work, it needs a monthly subscription")).toBe('subscription/unexpected_subscription');
+  it('finds every bucket a note mentions, with the highest-priority one as the main category', () => {
+    expect(mentioned('Too big for the porch light and it keeps going offline')).toEqual(['connectivity/drops_offline', 'fit/fixture']);
+    expect(sort('Too big for the porch light and it keeps going offline')).toBe('connectivity/drops_offline');
+    expect(mentioned('Picture is blurry at night and you need a subscription to see video')).toEqual([
+      'subscription/unexpected_subscription',
+      'performance/image_quality',
+    ]);
+    expect(mentioned('Never received it, and the reviews say it drops offline')).toEqual(['shipping/not_received', 'connectivity/drops_offline']);
+    // One mention per bucket: the first matching sub-reason.
+    expect(mentioned('Night vision is poor and one stopped working')).toEqual(['performance/image_quality']);
+  });
+
+  it('leaves out matches that are noise when a note mentions a real problem', () => {
+    // Setup words count only on their own.
+    expect(mentioned('Error connecting to Wifi')).toEqual(['connectivity/wont_connect']);
+    expect(mentioned('The app setup kept failing at the QR code')).toEqual(['performance/app_setup']);
+    // Loose words need context: "every night", "a picture of", "it's been a month", "didn't come with".
+    expect(mentioned('It keeps going offline every night')).toEqual(['connectivity/drops_offline']);
+    expect(mentioned('Night vision is terrible')).toEqual(['performance/image_quality']);
+    expect(mentioned("Missing two bracket pieces. I took a picture of what's missing")).toEqual(['shipping/wrong_missing']);
+    expect(mentioned("Only one arrived and it's been a month")).not.toContain('subscription/unexpected_subscription');
+    expect(mentioned("It didn't come with a chip and it won't connect")).toEqual(['connectivity/wont_connect']);
+    expect(mentioned("Sd card issues, doesn't detect sd card")).toEqual(['subscription/sd_card']);
+    // One problem, two matches: a weak signal through the window is Connectivity, not also window fit.
+    expect(mentioned('Connects in the kitchen but moved to my window it loses connection')).toEqual(['connectivity/drops_offline']);
+    expect(mentioned('Weak signal through the window')).toEqual(['connectivity/weak_signal']);
+  });
+
+  it('counts a change of mind only when nothing else is mentioned', () => {
+    expect(mentioned("Don't need it anymore, and it would not connect")).toEqual(['connectivity/wont_connect']);
+    expect(mentioned('Changed my mind, no longer needed')).toEqual(['changed_mind/circumstances']);
+  });
+
+  it('files a note that says nothing specific as Generic, with no mention', () => {
+    expect(sort("Doesn't work")).toBe('generic/vague');
+    expect(mentioned("Doesn't work")).toEqual([]);
+    expect(mentioned("Doesn't work, it needs a monthly subscription")).toEqual(['subscription/unexpected_subscription']);
+  });
+
+  it('reads every comment on an Amazon order', () => {
+    const r = sortReturn(
+      { channel: 'amazon', customer_comment: 'Too big for the porch light', comments: ['Too big for the porch light', 'Not Compatible|Wifi|Keeps going offline'] },
+      { rank },
+    );
+    expect(r.mentions.map((m) => `${m.category}/${m.subreason}`)).toEqual(['connectivity/drops_offline', 'fit/fixture']);
+    expect(r.mentions[0].note).toBe('Wifi | Keeps going offline'); // the other unit's comment, where it was mentioned
   });
 
   it('covers every category', () => {
@@ -118,7 +156,7 @@ describe('sorting a return', () => {
   });
 
   it('leaves a note it does not recognise for a person', () => {
-    expect(sortReturn({ channel: 'tiktok', customer_comment: 'Thanks' }, { rank })).toEqual({ note_clean: 'Thanks', category: null, subreason: null, why: '' });
+    expect(sortReturn({ channel: 'tiktok', customer_comment: 'Thanks' }, { rank })).toEqual({ note_clean: 'Thanks', category: null, subreason: null, why: '', mentions: [] });
   });
 });
 
@@ -165,7 +203,7 @@ describe.skipIf(!TEST_DATABASE_URL)('sorting returns in the database', () => {
   it('lets editors re-sort, and never overwrites a manual call', async () => {
     const { rows: [manual] } = await db.query(
       `SELECT c.id AS category_id, s.id AS subreason_id FROM return_subreasons s JOIN return_categories c ON c.id = s.category_id
-        WHERE c.key = 'non_specific' AND s.key = 'vague'`,
+        WHERE c.key = 'generic' AND s.key = 'vague'`,
     );
     await db.query(
       `UPDATE returns SET category_id = $1, subreason_id = $2, category_source = 'manual', category_why = 'checked by hand' WHERE return_ref = 'R-12'`,
@@ -179,7 +217,7 @@ describe.skipIf(!TEST_DATABASE_URL)('sorting returns in the database', () => {
 
     const rows = await byRef();
     expect(rows['R-10']).toMatchObject({ category: 'connectivity', category_source: 'rule' });
-    expect(rows['R-12']).toMatchObject({ category: 'non_specific', category_source: 'manual', category_why: 'checked by hand' });
+    expect(rows['R-12']).toMatchObject({ category: 'generic', category_source: 'manual', category_why: 'checked by hand' });
     const { body } = await viewer.get('/api/activity').expect(200);
     expect(body.activity.find((a) => a.action === 'sorted')).toMatchObject({ entity_type: 'returns', changes: { sorted: 2, unsorted: 0 } });
   });

@@ -20,8 +20,10 @@ test('an editor confirms a call the rules made', async ({ page }) => {
   await expect(flag).toHaveAttribute('aria-pressed', 'false');
   await flag.click();
   await expect(flag).toHaveAttribute('aria-pressed', 'true');
-  await row.getByLabel('Add another category').selectOption('connectivity');
-  await expect(row).toContainText('Also about: Connectivity');
+  await row.getByLabel('Add another mention').selectOption('connectivity/wont_connect');
+  // Connectivity comes first in the priority order, so it becomes the main call and Performance rides alongside.
+  await expect(row).toContainText("ConnectivityWon't connect");
+  await expect(row).toContainText('Also mentions: Performance / Hardware');
   await page.getByLabel('Filter by flag').selectOption('looks_used');
   await expect(page.getByText('Every call the rules made has been reviewed.')).toBeVisible();
   await page.getByLabel('Filter by flag').selectOption('support_unresolved');
@@ -32,7 +34,7 @@ test('an editor confirms a call the rules made', async ({ page }) => {
   await expect(page.getByText('Every call the rules made has been reviewed.')).toBeVisible();
   await expect(page.getByLabel('Review progress')).toContainText('1 of 1 returns with a note reviewed (100%)');
 
-  // On the Returns page, that sub-reason now counts as checked; a call can also be re-filed from there.
+  // On the Returns page, Confirm checked both mentions; a call can also be re-filed from there.
   await page.goto('/returns?month=2026-07');
   await page.getByRole('button', { name: /^Performance \/ Hardware/ }).click();
   const subs = page.getByRole('list', { name: 'Performance / Hardware by sub-reason' });
@@ -40,7 +42,9 @@ test('an editor confirms a call the rules made', async ({ page }) => {
   await subs.getByRole('button', { name: /Works briefly then dies/ }).click();
   await expect(subs.locator('.filed-return')).toContainText('Checked');
   await expect(subs.getByRole('button', { name: 'Looks right' })).toHaveCount(0);
-  await expect(subs.getByLabel(/^Re-file the return/)).toBeVisible();
+  await expect(subs.getByLabel('Re-file as')).toBeVisible();
+  // The connectivity problem added on the Review page counts too.
+  await expect(page.getByRole('button', { name: /^Connectivity/ })).toContainText('1 mention');
 });
 
 test('a note the rules don’t recognise lands on the Other page and is filed by hand', async ({ page }) => {
@@ -59,7 +63,8 @@ test('a note the rules don’t recognise lands on the Other page and is filed by
   const row = page.locator('tr', { hasText: 'Thanks anyway' });
   await expect(row).toContainText('Platform reason: No longer needed');
   await expect(row.getByRole('button', { name: 'Save' })).toBeDisabled();
-  await row.getByLabel(/^Category for/).selectOption('non_specific/vague');
+  // It says nothing specific: Generic.
+  await row.getByLabel(/^Category for/).selectOption('generic/vague');
   await row.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Every return with a note has a category.')).toBeVisible();
   await expect(page.getByLabel('Review progress')).toContainText('2 of 2');
