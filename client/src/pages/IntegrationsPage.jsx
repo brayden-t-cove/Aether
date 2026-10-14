@@ -37,7 +37,7 @@ export default function IntegrationsPage() {
 
   if (error) return <div className="page"><ErrorNote error={error} /></div>;
   if (!data) return <div className="page"><p className="muted">Loading…</p></div>;
-  const { app, odyssey, slack, uploads, database } = data;
+  const { app, odyssey, asana, slack, uploads, database } = data;
 
   return (
     <div className="page narrow-ish">
@@ -92,6 +92,53 @@ export default function IntegrationsPage() {
         ) : (
           <p className="muted small">
             Set <code>ODYSSEY_API_URL</code> and <code>ODYSSEY_API_KEY</code>. Odyssey needs a small change to accept the key; see <code>docs/ODYSSEY_API.md</code>.
+          </p>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="row between">
+          <h2>Asana</h2>
+          <StatusBadge status={on(asana.configured)} />
+        </div>
+        {asana.configured ? (
+          <>
+            <p className="small">
+              Read-only. Comments on Asana tasks linked to checklist items are pulled into the items' updates every {asana.syncMinutes} minutes.{' '}
+              {asana.linked.projects} project{asana.linked.projects === 1 ? '' : 's'} and {asana.linked.items} item{asana.linked.items === 1 ? '' : 's'} linked.
+              {asana.lastSuccessAt ? ` Last successful pull ${formatDateTime(asana.lastSuccessAt)}.` : ' No successful pull yet.'}
+            </p>
+            <Action label="Pull from Asana" path="/api/asana/pull" onDone={reload} />
+            {asana.runs.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Started</th>
+                      <th>By</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {asana.runs.map((r) => (
+                      <tr key={r.id}>
+                        <td className="small">{formatDateTime(r.started_at)}</td>
+                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">
+                          {r.ok === null ? 'Running…' : `${r.comments_synced} new comment${r.comments_synced === 1 ? '' : 's'}`}
+                          {r.error && <div className="error-text">{r.error}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted small">
+            Set <code>ASANA_TOKEN</code> to a personal access token (Asana → Settings → Apps → Developer apps). Aether only reads: it sees what that
+            person can see in Asana.
           </p>
         )}
       </section>

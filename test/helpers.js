@@ -14,6 +14,7 @@ export const testConfig = {
   appEnv: 'test',
   google: { enabled: false },
   odyssey: {},
+  asana: {},
   slack: { webhookUrl: '', digestHourUtc: 14 },
   maxUploadMb: 25,
 };
@@ -31,6 +32,7 @@ export function makeApp(db, overrides = {}) {
     ...testConfig,
     ...overrides,
     odyssey: { ...testConfig.odyssey, ...overrides.odyssey },
+    asana: { ...testConfig.asana, ...overrides.asana },
     slack: { ...testConfig.slack, ...overrides.slack },
   };
   return createApp({ db, config });

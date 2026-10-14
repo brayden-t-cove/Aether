@@ -12,6 +12,7 @@ import ErrorNote from '../components/ErrorNote.jsx';
 import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
 import TestResults from '../components/TestResults.jsx';
+import { AsanaProjectLink } from '../components/Asana.jsx';
 
 /**
  * Group by stage, in the order stages first appear, when items have stages
@@ -250,6 +251,7 @@ export default function ProjectPage() {
           </button>
         )}
       </header>
+      <AsanaProjectLink project={project} editable={editable} onChange={reload} />
 
       <ErrorNote error={actionError} />
 
@@ -349,6 +351,7 @@ export default function ProjectPage() {
           key={`${selected.id}:${selected.updated_at}`}
           item={selected}
           projectId={project.id}
+          project={project}
           allItems={items}
           users={users.data.users}
           stages={stages}

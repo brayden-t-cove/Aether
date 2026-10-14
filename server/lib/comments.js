@@ -4,8 +4,9 @@ import { v } from './validate.js';
 /** An update's text: trimmed, at most 5,000 characters. Blank comes back as ''. */
 export const COMMENT_BODY = v.text({ label: 'Update', max: 5000 });
 
-const SELECT = `SELECT c.id, c.item_id, c.body, c.state, c.state_from, c.created_by, c.created_at, c.edited_at,
-                       u.name AS author_name, u.email AS author_email
+// Comments pulled from Asana keep their writer's Asana name when no Aether user has their email.
+const SELECT = `SELECT c.id, c.item_id, c.body, c.state, c.state_from, c.created_by, c.created_at, c.edited_at, c.source,
+                       COALESCE(u.name, NULLIF(c.author_label, '')) AS author_name, u.email AS author_email
                   FROM item_comments c LEFT JOIN users u ON u.id = c.created_by`;
 
 /** An item's updates, oldest first. */
@@ -42,8 +43,8 @@ export async function deleteComment(db, id) {
  * latest_comment is { body, author_name, created_at, state, state_from } or null.
  */
 export const LATEST_COMMENT_SQL = (alias) => `
-  (SELECT json_build_object('body', c.body, 'author_name', COALESCE(u.name, u.email), 'created_at', c.created_at,
-                            'state', c.state, 'state_from', c.state_from)
+  (SELECT json_build_object('body', c.body, 'author_name', COALESCE(u.name, NULLIF(c.author_label, ''), u.email), 'created_at', c.created_at,
+                            'state', c.state, 'state_from', c.state_from, 'source', c.source)
      FROM item_comments c LEFT JOIN users u ON u.id = c.created_by
     WHERE c.item_id = ${alias}.id ORDER BY c.created_at DESC, c.id DESC LIMIT 1) AS latest_comment,
   (SELECT count(*)::int FROM item_comments c WHERE c.item_id = ${alias}.id) AS comment_count`;

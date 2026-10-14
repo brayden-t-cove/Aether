@@ -287,6 +287,7 @@ export function projectRoutes({ db, files, notify }) {
     requireRole('editor'),
     asyncHandler(async (req, res) => {
       const before = await loadOwnComment(req);
+      if (before.source === 'asana') throw new HttpError(403, 'This update came from Asana. Edit it there.');
       if (before.created_by !== req.user.id) throw new HttpError(403, 'Only the person who wrote an update can edit it');
       const body = COMMENT_BODY(req.body?.body);
       if (!body) throw new HttpError(400, 'An update can’t be empty. Delete it instead.');
@@ -303,6 +304,7 @@ export function projectRoutes({ db, files, notify }) {
     requireRole('editor'),
     asyncHandler(async (req, res) => {
       const comment = await loadOwnComment(req);
+      if (comment.source === 'asana') throw new HttpError(403, 'This update came from Asana. Delete it there.');
       if (comment.created_by !== req.user.id && !hasRole(req.user.role, 'admin')) throw new HttpError(403, 'Only the writer or an admin can delete an update');
       await deleteComment(db, comment.id);
       const item = await loadItem(db, comment.item_id);

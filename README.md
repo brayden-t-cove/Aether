@@ -48,6 +48,10 @@ Uploaded files are stored on disk in `FILES_DIR`. When it isn't set, Aether hide
   - **Test results** show on product and project pages: Odyssey's test sessions, with a **Pull from Odyssey** button for editors, and test results added by hand (a lab report or in-house test, with its result, date and who ran it) with the report uploaded as a PDF or linked. A result added from a project belongs to its product, so every project for that product shows it.
   - **Send to Odyssey** adds an Aether product to Odyssey's catalog.
   - Setup and matching rules: [docs/ODYSSEY_API.md](docs/ODYSSEY_API.md). Odyssey needs a small change to accept Aether's service key.
+- **Asana (read-only):** with `ASANA_TOKEN` set (a personal access token: Asana → Settings → Apps → Developer apps), a project page has **Link Asana project**: paste the Asana project's link (one Asana project per launch). In a checklist item's panel, pick the Asana task that matches it, or paste a task link. The task's comments then show in the item's Updates, marked "via Asana", and are pulled every 15 minutes or on **Pull from Asana**.
+  - Only comments come over, not Asana's activity ("changed the due date"). Each is copied once, follows edits made in Asana, and goes if it is deleted there. Writers are matched to Aether users by email; others show their Asana name. Copies can't be edited in Aether.
+  - A task feeds one item. Unlinking an item removes its copied comments (they stay in Asana).
+  - Nothing is written to Asana. Aether sees what the token's owner can see, so a task they can't see is skipped and reported on **Admin → Integrations**.
 
 ## Returns, listings and comparisons (Phase 4)
 

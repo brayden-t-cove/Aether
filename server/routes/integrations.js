@@ -3,26 +3,38 @@ import { readFileSync } from 'node:fs';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireRole } from '../auth/middleware.js';
 import { lastSyncRuns } from '../lib/sync.js';
+import { lastAsanaPulls } from '../lib/asanaSync.js';
 import { maybeSendDigest } from '../lib/digest.js';
+
+/** How many projects and items are linked to Asana. */
+async function linkedCounts(db) {
+  const { rows } = await db.query(
+    `SELECT (SELECT count(*)::int FROM projects WHERE asana_project_gid IS NOT NULL) AS projects,
+            (SELECT count(*)::int FROM checklist_items WHERE asana_task_gid IS NOT NULL) AS items`,
+  );
+  return rows[0];
+}
 
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
 /** Admin view of what's connected, with test buttons. Never returns secrets. */
-export function integrationRoutes({ db, config, odyssey, notify, files }) {
+export function integrationRoutes({ db, config, odyssey, asana, notify, files }) {
   const router = Router();
 
   router.get(
     '/api/admin/integrations',
     requireRole('admin'),
     asyncHandler(async (req, res) => {
-      const [sync, digest, migrations] = await Promise.all([
+      const [sync, asanaPulls, digest, migrations] = await Promise.all([
         lastSyncRuns(db, 5),
+        lastAsanaPulls(db, 5),
         db.query(`SELECT value, updated_at FROM job_state WHERE key = 'slack_digest_last_date'`),
         db.query('SELECT name, applied_at FROM schema_migrations ORDER BY version'),
       ]);
       res.json({
         app: { env: config.appEnv, version, publicUrl: config.publicUrl, googleSignIn: config.google.enabled },
         odyssey: { configured: Boolean(odyssey), url: odyssey?.url ?? null, syncMinutes: config.odyssey.syncMinutes, ...sync },
+        asana: { configured: Boolean(asana), syncMinutes: config.asana.syncMinutes, linked: await linkedCounts(db), ...asanaPulls },
         slack: { configured: notify.enabled, digestHourUtc: config.slack.digestHourUtc, lastDigestDate: digest.rows[0]?.value ?? null },
         uploads: { enabled: Boolean(files), maxUploadMb: config.maxUploadMb },
         database: { migrations: migrations.rows },

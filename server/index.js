@@ -4,6 +4,8 @@ import { migrate } from './db/migrate.js';
 import { createApp } from './app.js';
 import { bootstrapAdmin, MIN_PASSWORD_LENGTH } from './lib/users.js';
 import { createOdysseyClient } from './lib/odyssey.js';
+import { createAsanaClient } from './lib/asana.js';
+import { pullAsanaComments } from './lib/asanaSync.js';
 import { runOdysseySync } from './lib/sync.js';
 import { startScheduler } from './lib/scheduler.js';
 import { createNotifier, messages } from './lib/notify.js';
@@ -37,8 +39,9 @@ if (config.adminPassword) {
 }
 
 const odyssey = createOdysseyClient(config.odyssey);
+const asana = createAsanaClient(config.asana);
 const notify = createNotifier(config);
-const app = createApp({ db, config, odyssey, notify });
+const app = createApp({ db, config, odyssey, asana, notify });
 
 // Tell Slack when Odyssey sync starts failing, once, not on every attempt.
 let lastSyncOk = true;
@@ -57,6 +60,15 @@ const stopJobs = startScheduler([
     },
   },
   {
+    name: 'asana-pull',
+    everyMs: asana ? config.asana.syncMinutes * 60_000 : 0,
+    firstRunMs: 45_000,
+    run: async () => {
+      const run = await pullAsanaComments(db, asana, { trigger: 'schedule' });
+      if (run.ok === false) console.error(`[jobs] Asana pull: ${run.error}`);
+    },
+  },
+  {
     name: 'slack-digest',
     everyMs: notify.enabled ? 10 * 60_000 : 0,
     firstRunMs: 60_000,
@@ -67,6 +79,7 @@ const server = app.listen(config.port, () => {
   console.log(`[aether] listening on ${config.publicUrl} (port ${config.port})`);
   console.log(`[aether] Google sign-in ${config.google.enabled ? 'enabled' : 'disabled'}`);
   console.log(`[aether] Odyssey sync ${odyssey ? `every ${config.odyssey.syncMinutes} min from ${odyssey.url}` : 'not configured'}`);
+  console.log(`[aether] Asana ${asana ? `comments pulled every ${config.asana.syncMinutes} min` : 'not configured'}`);
   console.log(`[aether] file uploads ${config.filesDir ? `to ${config.filesDir}` : 'off (links only)'}`);
   console.log(`[aether] Slack ${notify.enabled ? `on, daily digest after ${config.slack.digestHourUtc}:00 UTC` : 'not configured'} · environment: ${config.appEnv}`);
 });

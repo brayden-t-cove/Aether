@@ -49,6 +49,12 @@ export const config = {
     apiKey: process.env.ODYSSEY_API_KEY || '',
     syncMinutes: Number(process.env.ODYSSEY_SYNC_MINUTES) || 15,
   },
+  // Asana, read-only: a personal access token, whose owner's view of Asana is what Aether can read.
+  asana: {
+    token: process.env.ASANA_TOKEN || '',
+    apiUrl: (process.env.ASANA_API_URL || '').replace(/\/$/, ''),
+    syncMinutes: Number(process.env.ASANA_SYNC_MINUTES) || 15,
+  },
 };
 
 config.google.enabled = Boolean(config.google.clientId && config.google.clientSecret);
