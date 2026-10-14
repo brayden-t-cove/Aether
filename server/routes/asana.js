@@ -3,7 +3,9 @@ import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
 import { isUuid } from '../lib/validate.js';
-import { getItem } from '../lib/items.js';
+import { createItem, getItem } from '../lib/items.js';
+import { withTransaction } from '../lib/db.js';
+import { sectionOf, stateFromTask, suggestMatches } from '../lib/asanaTasks.js';
 import { getProject } from '../lib/projects.js';
 import { parseAsanaLink } from '../lib/asana.js';
 import { lastAsanaPulls, pullAsanaComments } from '../lib/asanaSync.js';
@@ -57,7 +59,9 @@ export function asanaRoutes({ db, asana }) {
       if (run.skipped) throw new HttpError(409, 'A pull is already running. Try again in a minute.');
       if (run.ok === false && !run.id) throw new HttpError(502, run.error);
       const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-      const message = `${plural(run.added, 'new comment')} from ${plural(run.items, 'linked task')}${run.error ? `. ${run.error}` : ''}`;
+      const message = run.items
+        ? `${plural(run.added, 'new comment')} from ${plural(run.items, 'linked task')}${run.error ? `. ${run.error}` : ''}`
+        : 'No checklist items are linked to Asana tasks yet. Use "Asana tasks" on the project page to link them or add them as items.';
       res.json({ run, message });
     }),
   );
@@ -97,7 +101,35 @@ export function asanaRoutes({ db, asana }) {
     }),
   );
 
-  // The linked Asana project's tasks, each with the item it feeds (if any), for picking one to link.
+  /** The linked project's tasks, each with its column, the item it feeds, or a suggested item to match it to. */
+  async function projectTasks(project) {
+    const tasks = await fromAsana(() => asana.listProjectTasks(project.asana_project_gid));
+    const { rows: linked } = await db.query(
+      'SELECT id, title, project_id, asana_task_gid FROM checklist_items WHERE asana_task_gid = ANY($1::text[])',
+      [tasks.map((t) => t.gid)],
+    );
+    const byGid = new Map(linked.map((i) => [i.asana_task_gid, i]));
+    const { rows: free } = await db.query('SELECT id, title FROM checklist_items WHERE project_id = $1 AND asana_task_gid IS NULL ORDER BY position', [project.id]);
+    const suggested = suggestMatches(tasks.filter((t) => !byGid.has(t.gid)), free);
+    return tasks.map((t) => {
+      const section = sectionOf(t, project.asana_project_gid);
+      const item = byGid.get(t.gid);
+      return {
+        gid: t.gid,
+        name: t.name,
+        completed: Boolean(t.completed),
+        section,
+        state: stateFromTask(t, section),
+        due_on: t.due_on || null,
+        url: safeUrl(t.permalink_url),
+        assignee: t.assignee?.name || '',
+        assignee_email: t.assignee?.email || '',
+        item: item ? { id: item.id, title: item.title, project_id: item.project_id } : null,
+        suggested: suggested.has(t.gid) ? { id: suggested.get(t.gid).id, title: suggested.get(t.gid).title } : null,
+      };
+    });
+  }
+
   router.get(
     '/api/projects/:id/asana/tasks',
     requireAuth,
@@ -105,22 +137,88 @@ export function asanaRoutes({ db, asana }) {
       needAsana();
       const project = await loadProject(req.params.id);
       if (!project.asana_project_gid) return res.json({ tasks: [] });
-      const tasks = await fromAsana(() => asana.listProjectTasks(project.asana_project_gid));
-      const { rows: linked } = await db.query(
-        'SELECT id, title, project_id, asana_task_gid FROM checklist_items WHERE asana_task_gid = ANY($1::text[])',
-        [tasks.map((t) => t.gid)],
-      );
-      const byGid = new Map(linked.map((i) => [i.asana_task_gid, i]));
-      res.json({
-        tasks: tasks.map((t) => ({
-          gid: t.gid,
-          name: t.name,
-          completed: Boolean(t.completed),
-          url: safeUrl(t.permalink_url),
-          assignee: t.assignee?.name || '',
-          item: byGid.has(t.gid) ? { id: byGid.get(t.gid).id, title: byGid.get(t.gid).title, project_id: byGid.get(t.gid).project_id } : null,
-        })),
+      res.json({ tasks: await projectTasks(project) });
+    }),
+  );
+
+  /**
+   * Bring tasks into the checklist in one go. { links: [{ task, item_id }] }: with item_id, link the task to that
+   * item; with item_id null, add the task as a new item (its state from its column, due date, and owner by email)
+   * linked to it. Then pull their comments. Tasks already linked, or not in this Asana project, are skipped.
+   */
+  router.post(
+    '/api/projects/:id/asana/apply',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      needAsana();
+      const project = await loadProject(req.params.id);
+      if (!project.asana_project_gid) throw new HttpError(400, 'Link this project to its Asana project first');
+      const links = Array.isArray(req.body?.links) ? req.body.links : [];
+      if (!links.length || links.length > 500) throw new HttpError(400, 'Say which tasks to bring in');
+      for (const l of links) {
+        if (typeof l?.task !== 'string' || !/^\d+$/.test(l.task) || (l.item_id != null && !isUuid(l.item_id))) throw new HttpError(400, 'Each link needs a task, and an item or null');
+      }
+
+      const tasks = new Map((await projectTasks(project)).map((t) => [t.gid, t]));
+      const { rows: stages } = await db.query("SELECT 1 FROM checklist_items WHERE project_id = $1 AND stage <> '' LIMIT 1", [project.id]);
+      const { rows: users } = await db.query('SELECT id, lower(email) AS email FROM users WHERE active');
+      const userByEmail = new Map(users.map((u) => [u.email, u.id]));
+
+      const done = await withTransaction(db, async (tx) => {
+        const result = { linked: 0, added: 0, skipped: [], itemIds: [] };
+        const usedItems = new Set();
+        for (const { task: gid, item_id: itemId } of links) {
+          const t = tasks.get(gid);
+          if (!t) {
+            result.skipped.push({ task: gid, reason: 'Not in the linked Asana project' });
+            continue;
+          }
+          if (t.item) {
+            result.skipped.push({ task: gid, reason: `Already feeds "${t.item.title}"` });
+            continue;
+          }
+          let id = itemId;
+          if (id) {
+            const { rows } = await tx.query('SELECT id, asana_task_gid FROM checklist_items WHERE id = $1 AND project_id = $2', [id, project.id]);
+            if (!rows[0] || rows[0].asana_task_gid || usedItems.has(id)) {
+              result.skipped.push({ task: gid, reason: rows[0] ? 'That item already has a task' : 'That item is not in this project' });
+              continue;
+            }
+            result.linked++;
+          } else {
+            const item = await createItem(
+              tx,
+              project.id,
+              {
+                title: t.name.trim().slice(0, 300) || 'Asana task',
+                state: t.state,
+                due_date: t.due_on,
+                owner_id: userByEmail.get(t.assignee_email.toLowerCase()) ?? null,
+                stage: stages.length ? 'From Asana' : '',
+              },
+              req.user.id,
+            );
+            id = item.id;
+            result.added++;
+          }
+          usedItems.add(id);
+          await tx.query('UPDATE checklist_items SET asana_task_gid = $2, asana_task_name = $3, asana_task_url = $4, updated_at = now() WHERE id = $1', [id, gid, t.name, t.url]);
+          result.itemIds.push(id);
+        }
+        if (result.itemIds.length) {
+          await logActivity(tx, {
+            entityType: 'project',
+            entityId: project.id,
+            action: 'asana_tasks_applied',
+            changes: { label: project.name, linked: result.linked, added: result.added },
+            userId: req.user.id,
+          });
+        }
+        return result;
       });
+
+      const run = done.itemIds.length ? await pullAsanaComments(db, asana, { trigger: 'manual', userId: req.user.id, itemIds: done.itemIds }) : {};
+      res.json({ linked: done.linked, added: done.added, skipped: done.skipped, pulled: run.added ?? 0, error: run.error ?? null });
     }),
   );
 

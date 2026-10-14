@@ -43,7 +43,13 @@ export function createAsanaClient({ token, apiUrl = ASANA_API_URL, timeoutMs = 1
   return {
     url: base,
     getProject: async (gid) => (await request(`/projects/${gid}`, { opt_fields: 'name,permalink_url' }, 'that project')).data,
-    listProjectTasks: (gid) => all(`/projects/${gid}/tasks`, { opt_fields: 'name,completed,permalink_url,assignee.name' }, 'that project'),
+    /** A project's top-level tasks, with the board column (section) each sits in for that project. */
+    listProjectTasks: (gid) =>
+      all(
+        `/projects/${gid}/tasks`,
+        { opt_fields: 'name,completed,permalink_url,due_on,assignee.name,assignee.email,memberships.project.gid,memberships.section.name' },
+        'that project',
+      ),
     getTask: async (gid) => (await request(`/tasks/${gid}`, { opt_fields: 'name,completed,permalink_url' }, 'that task')).data,
     /** The comments on a task, oldest first: stories of type comment_added, not "X changed the due date". */
     listComments: async (gid) =>

@@ -2413,3 +2413,16 @@ mark.matched {
   color: var(--text-muted);
   border-color: #f06a6a;
 }
+.asana-tasks-head {
+  align-items: flex-start;
+}
+.asana-tasks-head h2 {
+  margin-bottom: 0.15rem;
+}
+.asana-tasks select {
+  max-width: 100%;
+}
+.asana-tasks-apply {
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}

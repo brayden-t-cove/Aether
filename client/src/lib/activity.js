@@ -49,6 +49,8 @@ export function describeActivity(a) {
       if (a.action === 'asana_unlinked') return `${who} unlinked ${label} from Asana`;
       if (a.action === 'item_asana_linked') return `${who} linked ${label} to Asana task "${c.asana}"`;
       if (a.action === 'item_asana_unlinked') return `${who} unlinked ${label} from Asana`;
+      if (a.action === 'asana_tasks_applied')
+        return `${who} brought Asana tasks into the checklist: ${c.linked} matched to items, ${c.added} added as new items`;
       if (a.action === 'asana_comments') return `${c.count} new comment${c.count === 1 ? '' : 's'} from Asana on ${label}`;
       if (a.action === 'attachment_added') return `${who} attached "${c.label}" to "${c.item}"`;
       if (a.action === 'attachment_removed') return `${who} removed "${c.label}" from "${c.item}"`;
