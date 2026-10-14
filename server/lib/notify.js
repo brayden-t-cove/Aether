@@ -52,6 +52,8 @@ export const messages = {
   requestCreated: (n, { request, who }) =>
     `🎨 New design request: ${n.link(`/design-requests/${request.id}`, request.title)}${request.assignee_name ? ` for ${n.esc(request.assignee_name)}` : ''} (from ${n.esc(who)})`,
   requestDelivered: (n, { request, who }) => `🎨 ${n.link(`/design-requests/${request.id}`, request.title)} was delivered by ${n.esc(who)} and is waiting for approval`,
+  requestComment: (n, { request, who, body }) =>
+    `💬 ${n.esc(who)} commented on ${n.link(`/design-requests/${request.id}`, request.title)}\n> ${n.esc(body).slice(0, 300)}`,
   returnsImported: (n, { count, units, channel, who }) => `📦 ${n.esc(who)} imported ${count} ${n.esc(channel)} returns (${units} units). ${n.link('/returns', 'See returns')}`,
   syncFailed: (n, { error }) => `⚠️ Aether couldn't sync with Odyssey: ${n.esc(error)}. Aether is showing its last copy.`,
 };

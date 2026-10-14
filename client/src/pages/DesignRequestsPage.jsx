@@ -100,6 +100,7 @@ export default function DesignRequestsPage() {
                         <div className="muted small">
                           {REQUEST_TYPES[r.type]}
                           {r.document_title && ` · for ${r.document_title}`}
+                          {r.comment_count > 0 && ` · ${r.comment_count} comment${r.comment_count === 1 ? '' : 's'}`}
                         </div>
                       </td>
                       <td>{r.product_id ? <Link to={`/products/${r.product_id}`}>{r.product_name}</Link> : '—'}</td>

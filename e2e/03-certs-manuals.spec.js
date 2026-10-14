@@ -86,6 +86,16 @@ test('design work is delivered with a file and approved', async ({ page, request
   await page.getByLabel('Request state').selectOption('delivered');
   await expect.poll(async () => (await slackMessages(request)).at(-1)).toMatch(/Wall-mount diagram.* was delivered/);
 
+  // Feedback goes on the request itself, between Details and Deliverables, and the channel hears about it.
+  const comments = page.getByRole('region', { name: 'Comments' });
+  await comments.getByLabel('New comment').fill('Can the screw positions be labelled?');
+  await comments.getByRole('button', { name: 'Post comment' }).click();
+  await expect(comments.locator('.update')).toContainText('Can the screw positions be labelled?');
+  await expect(comments.locator('.update')).toContainText('Delivered');
+  await expect.poll(async () => (await slackMessages(request)).at(-1)).toMatch(/commented on .*Wall-mount diagram.*\n> Can the screw positions be labelled\?/);
+  await nav(page, 'Design requests');
+  await expect(page.locator('tr', { hasText: 'Wall-mount diagram' })).toContainText('1 comment');
+
   await login(page, 'admin');
   const review = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Waiting for review', exact: true }) });
   await expect(review).toContainText('User manual v2');
