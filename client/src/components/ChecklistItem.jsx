@@ -1,3 +1,4 @@
+import { TEAMS } from '../../../shared/roles.js';
 import { useEffect, useRef, useState } from 'react';
 import { STATE_LABELS, STATES } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
@@ -92,6 +93,11 @@ export default function ChecklistItem({ item, projectId, editable, selected, onS
               <Avatar name={item.owner_name} />
               <span className="item-owner-name">{item.owner_name}</span>
             </>
+          ) : item.team ? (
+            // Nobody has it yet: it's waiting on that team.
+            <span className="muted" title="Nobody has taken this yet">
+              {TEAMS[item.team]} team
+            </span>
           ) : (
             <span className="muted">Unassigned</span>
           )}

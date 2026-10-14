@@ -17,12 +17,14 @@ import {
   getProject,
   getProjectSummary,
   listProjectItems,
+  listProjectMembers,
   listProjects,
   PROJECT_FIELDS,
   updateProject,
 } from '../lib/projects.js';
 import {
   addDependency,
+  addProjectMember,
   createItem,
   createItemsFromTemplate,
   deleteItem,
@@ -95,11 +97,12 @@ export function projectRoutes({ db, files, notify }) {
     asyncHandler(async (req, res) => {
       const project = await getProjectSummary(db, req.params.id);
       if (!project) throw new HttpError(404, 'Project not found');
-      const [items, activity] = await Promise.all([
+      const [items, activity, members] = await Promise.all([
         listProjectItems(db, project.id),
         listActivity(db, { entityType: 'project', entityId: project.id, limit: 50 }),
+        listProjectMembers(db, project.id),
       ]);
-      res.json({ project, items, activity });
+      res.json({ project, items, activity, members });
     }),
   );
 
@@ -122,8 +125,14 @@ export function projectRoutes({ db, files, notify }) {
       if (fields.market_id && !market) throw new HttpError(400, 'Market not found');
       if (template?.needsMarket && !market) throw new HttpError(400, `The ${template.label} checklist needs a market`);
 
+      // The people on it: whoever creates it, its owner, and anyone picked.
+      const memberIds = Array.isArray(req.body?.member_ids) ? req.body.member_ids : [];
+      if (memberIds.some((m) => !isUuid(m))) throw new HttpError(400, 'Members must be user IDs');
+
       const project = await withTransaction(db, async (tx) => {
         const created = await createProject(tx, fields, req.user.id);
+        const { rows: found } = await tx.query('SELECT id FROM users WHERE id = ANY($1::uuid[])', [[req.user.id, created.owner_id, ...memberIds].filter(Boolean)]);
+        for (const u of found) await addProjectMember(tx, created.id, u.id, req.user.id);
         const itemCount = template ? await createItemsFromTemplate(tx, created.id, template.build({ market }), req.user.id) : 0;
         await logActivity(tx, {
           entityType: 'project',
@@ -145,6 +154,7 @@ export function projectRoutes({ db, files, notify }) {
       const before = await loadProject(db, req.params.id);
       const fields = parse(req.body, PROJECT_FIELDS);
       const project = await updateProject(db, before.id, fields);
+      if (fields.owner_id) await addProjectMember(db, project.id, fields.owner_id, req.user.id);
       if (fields.state === 'done' && before.state !== 'done') notify?.send(messages.projectDone(notify, { project, who: req.user.name || req.user.email }));
       const changes = diff(before, fields, Object.keys(fields));
       if (Object.keys(changes).length) {
@@ -195,6 +205,32 @@ export function projectRoutes({ db, files, notify }) {
         [q, `%${q}%`],
       );
       res.json({ items: rows });
+    }),
+  );
+
+  // Replace the people on a project. { user_ids: [...] }
+  router.put(
+    '/api/projects/:id/members',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const project = await loadProject(db, req.params.id);
+      const ids = req.body?.user_ids;
+      if (!Array.isArray(ids) || ids.some((m) => !isUuid(m))) throw new HttpError(400, 'Say which people (user IDs)');
+      const before = await listProjectMembers(db, project.id);
+      await withTransaction(db, async (tx) => {
+        const { rows: found } = await tx.query('SELECT id FROM users WHERE id = ANY($1::uuid[])', [ids]);
+        if (found.length !== new Set(ids).size) throw new HttpError(400, 'Some of those people were not found');
+        await tx.query('DELETE FROM project_members WHERE project_id = $1 AND NOT (user_id = ANY($2::uuid[]))', [project.id, ids]);
+        for (const id of ids) await addProjectMember(tx, project.id, id, req.user.id);
+      });
+      const members = await listProjectMembers(db, project.id);
+      const nameOf = (m) => m.name || m.email;
+      const added = members.filter((m) => !before.some((b) => b.id === m.id)).map(nameOf);
+      const removed = before.filter((b) => !members.some((m) => m.id === b.id)).map(nameOf);
+      if (added.length || removed.length) {
+        await logActivity(db, { entityType: 'project', entityId: project.id, action: 'members_updated', changes: { label: project.name, added, removed }, userId: req.user.id });
+      }
+      res.json({ members });
     }),
   );
 
