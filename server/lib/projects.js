@@ -156,3 +156,16 @@ export async function deleteProject(db, id) {
   const { rowCount } = await db.query('DELETE FROM projects WHERE id = $1', [id]);
   return rowCount > 0;
 }
+
+/** The people on a project, with their teams, by name. */
+export async function listProjectMembers(db, projectId) {
+  const { rows } = await db.query(
+    `SELECT u.id, u.name, u.email, u.active,
+            ARRAY(SELECT t.team FROM user_teams t WHERE t.user_id = u.id ORDER BY t.team) AS teams
+       FROM project_members m JOIN users u ON u.id = m.user_id
+      WHERE m.project_id = $1
+      ORDER BY COALESCE(NULLIF(u.name, ''), u.email)`,
+    [projectId],
+  );
+  return rows;
+}

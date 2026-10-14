@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ITEM_CATEGORIES } from '../../../shared/workflow.js';
+import { CATEGORY_TEAMS, TEAMS } from '../../../shared/roles.js';
 import { api } from '../lib/api.js';
 import { formatDate, isOverdue } from '../lib/format.js';
 import ErrorNote from './ErrorNote.jsx';
@@ -13,6 +14,7 @@ const toForm = (item) => ({
   title: item.title,
   stage: item.stage || '',
   category: item.category,
+  team: item.team || '',
   owner_id: item.owner_id || '',
   due_date: item.due_date || '',
   evidence_url: item.evidence_url || '',
@@ -54,7 +56,7 @@ export default function ItemPanel({ item, projectId, project, allItems, users, s
   }
   const save = (e) => {
     e.preventDefault();
-    run(() => api(`/api/items/${item.id}`, { method: 'PATCH', body: { ...form, owner_id: form.owner_id || null } }));
+    run(() => api(`/api/items/${item.id}`, { method: 'PATCH', body: { ...form, owner_id: form.owner_id || null, team: form.team || null } }));
   };
   const addBlocker = () =>
     blockerId &&
@@ -93,8 +95,10 @@ export default function ItemPanel({ item, projectId, project, allItems, users, s
       </div>
       <h2 className="item-panel-title">{item.title}</h2>
       <dl className="item-facts">
+        <dt>Team</dt>
+        <dd>{TEAMS[item.team] || <span className="muted">None</span>}</dd>
         <dt>Owner</dt>
-        <dd>{item.owner_name || <span className="muted">Unassigned</span>}</dd>
+        <dd>{item.owner_name || <span className="muted">{item.team ? 'Nobody yet: up for grabs' : 'Unassigned'}</span>}</dd>
         <dt>Due</dt>
         <dd className={overdue ? 'overdue-text' : ''}>{item.due_date ? `${overdue ? 'Overdue · ' : ''}${formatDate(item.due_date)}` : <span className="muted">No date</span>}</dd>
         {item.stage && (
@@ -156,8 +160,26 @@ export default function ItemPanel({ item, projectId, project, allItems, users, s
               </label>
               <label>
                 Category
-                <select value={form.category} onChange={set('category')}>
+                <select
+                  value={form.category}
+                  onChange={(e) => {
+                    const category = e.target.value;
+                    // The team follows the category while it's still the old category's team.
+                    setForm((f) => ({ ...f, category, team: f.team === (CATEGORY_TEAMS[f.category] ?? '') ? (CATEGORY_TEAMS[category] ?? '') : f.team }));
+                  }}
+                >
                   {Object.entries(ITEM_CATEGORIES).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Team
+                <select value={form.team} onChange={set('team')}>
+                  <option value="">No team</option>
+                  {Object.entries(TEAMS).map(([k, v]) => (
                     <option key={k} value={k}>
                       {v}
                     </option>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth } from '../auth/middleware.js';
-import { publicUser, recordLogin, setPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../lib/users.js';
+import { getUserWithTeams, publicUser, recordLogin, setPassword, verifyPassword, MIN_PASSWORD_LENGTH } from '../lib/users.js';
 import { logActivity } from '../lib/activity.js';
 
 export function authRoutes({ db, config, passport }) {
@@ -21,13 +21,16 @@ export function authRoutes({ db, config, passport }) {
   const logIn = (req, user) =>
     new Promise((resolve, reject) => req.logIn(user, (err) => (err ? reject(err) : resolve())));
 
-  router.get('/api/me', (req, res) => {
-    res.json({
-      user: req.isAuthenticated() ? publicUser(req.user) : null,
-      providers: { google: config.google.enabled, password: true },
-      env: config.appEnv,
-    });
-  });
+  router.get(
+    '/api/me',
+    asyncHandler(async (req, res) => {
+      res.json({
+        user: req.isAuthenticated() ? publicUser(await getUserWithTeams(db, req.user.id)) : null,
+        providers: { google: config.google.enabled, password: true },
+        env: config.appEnv,
+      });
+    }),
+  );
 
   router.post('/auth/local', loginLimiter, (req, res, next) => {
     passport.authenticate('local', async (err, user, info) => {

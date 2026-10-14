@@ -4,6 +4,13 @@
  */
 export const MODULES = [
   {
+    path: '/my-work',
+    label: 'My work',
+    built: true,
+    phase: 1,
+    summary: "Your items across every project, your teams' work nobody has taken yet, and what teammates have.",
+  },
+  {
     path: '/readiness',
     label: 'Readiness',
     built: true,

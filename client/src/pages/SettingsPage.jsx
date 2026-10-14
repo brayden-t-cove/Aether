@@ -1,7 +1,8 @@
+import { teamNames } from '../components/TeamPicker.jsx';
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
-import { ROLE_LABELS, TEAMS } from '../../../shared/roles.js';
+import { ROLE_LABELS } from '../../../shared/roles.js';
 
 export default function SettingsPage() {
   const { user, refresh } = useAuth();
@@ -37,8 +38,8 @@ export default function SettingsPage() {
           <dd>{user.email}</dd>
           <dt>Role</dt>
           <dd>{ROLE_LABELS[user.role]}</dd>
-          <dt>Team</dt>
-          <dd>{TEAMS[user.team] || '—'}</dd>
+          <dt>Teams</dt>
+          <dd>{teamNames(user.teams) || '—'}</dd>
           <dt>Google</dt>
           <dd>{user.googleLinked ? 'Linked' : 'Not linked'}</dd>
         </dl>
