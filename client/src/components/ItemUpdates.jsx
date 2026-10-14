@@ -70,7 +70,8 @@ export function LatestUpdate({ item, onOpen }) {
   );
 }
 
-function Update({ comment, canEdit, canDelete, onChanged }) {
+/** One update or comment, with Edit and Delete for its writer. `endpoint` is where it's changed. */
+export function Update({ comment, canEdit, canDelete, onChanged, endpoint = '/api/comments', noun = 'update', tag = null }) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(comment.body);
   const [error, setError] = useState(null);
@@ -91,11 +92,11 @@ function Update({ comment, canEdit, canDelete, onChanged }) {
   const save = (e) => {
     e.preventDefault();
     run(async () => {
-      await api(`/api/comments/${comment.id}`, { method: 'PATCH', body: { body } });
+      await api(`${endpoint}/${comment.id}`, { method: 'PATCH', body: { body } });
       setEditing(false);
     });
   };
-  const remove = () => window.confirm('Delete this update?') && run(() => api(`/api/comments/${comment.id}`, { method: 'DELETE' }));
+  const remove = () => window.confirm(`Delete this ${noun}?`) && run(() => api(`${endpoint}/${comment.id}`, { method: 'DELETE' }));
 
   return (
     <li className="update">
@@ -110,6 +111,7 @@ function Update({ comment, canEdit, canDelete, onChanged }) {
             <StateBadge state={comment.state_from} /> <span aria-hidden="true">→</span> <StateBadge state={comment.state} />
           </span>
         ) : null}
+        {tag}
         <span className="spacer" />
         {canEdit && !editing && (
           <button className="link-btn small" onClick={() => setEditing(true)}>
@@ -125,7 +127,7 @@ function Update({ comment, canEdit, canDelete, onChanged }) {
       <ErrorNote error={error} />
       {editing ? (
         <form className="stack" onSubmit={save}>
-          <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} aria-label="Edit update" maxLength={5000} />
+          <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} aria-label={`Edit ${noun}`} maxLength={5000} />
           <div className="row">
             <button className="btn primary small" disabled={busy || !body.trim()}>
               Save

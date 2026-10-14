@@ -9,6 +9,7 @@ import { requestStatus } from '../lib/statuses.js';
 import ActivityList from '../components/ActivityList.jsx';
 import Attachments from '../components/Attachments.jsx';
 import ErrorNote from '../components/ErrorNote.jsx';
+import RequestComments from '../components/RequestComments.jsx';
 import RequestForm from '../components/RequestForm.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 
@@ -125,6 +126,8 @@ export default function DesignRequestPage() {
           <p className="pre">{r.description}</p>
         </section>
       )}
+
+      <RequestComments request={r} editable={editable} onPosted={reload} />
 
       <section className="card">
         <h2>Deliverables</h2>

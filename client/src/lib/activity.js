@@ -71,6 +71,9 @@ export function describeActivity(a) {
       if (a.action === 'updated')
         return c.state ? `${who} moved request ${label} to ${REQUEST_STATES[c.state.to] || c.state.to}` : `${who} updated request ${label} ${describeChanges(c)}`;
       if (a.action === 'deleted') return `${who} deleted request ${label}`;
+      if (a.action === 'comment_added') return `${who} commented: “${c.excerpt}”`;
+      if (a.action === 'comment_edited') return `${who} edited a comment`;
+      if (a.action === 'comment_deleted') return `${who} deleted a comment`;
       if (a.action === 'attachment_added') return `${who} delivered ${label}`;
       if (a.action === 'attachment_removed') return `${who} removed ${label}`;
       break;

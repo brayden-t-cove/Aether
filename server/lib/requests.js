@@ -20,7 +20,8 @@ const REQUEST_SELECT = `
          p.name AS product_name,
          d.title AS document_title,
          ru.name AS requested_by_name,
-         au.name AS assignee_name
+         au.name AS assignee_name,
+         (SELECT count(*)::int FROM request_comments c WHERE c.request_id = r.id) AS comment_count
     FROM design_requests r
     LEFT JOIN products p ON p.id = r.product_id
     LEFT JOIN documents d ON d.id = r.document_id
