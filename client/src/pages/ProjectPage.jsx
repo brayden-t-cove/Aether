@@ -12,7 +12,7 @@ import ErrorNote from '../components/ErrorNote.jsx';
 import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
 import TestResults from '../components/TestResults.jsx';
-import { AsanaProjectLink } from '../components/Asana.jsx';
+import { AsanaProjectLink, AsanaTasks } from '../components/Asana.jsx';
 
 /**
  * Group by stage, in the order stages first appear, when items have stages
@@ -345,6 +345,8 @@ export default function ProjectPage() {
         ))}
         {editable && <AddItemForm projectId={project.id} stages={stages} onAdded={reload} />}
       </section>
+
+      <AsanaTasks project={project} items={items} editable={editable} onChange={reload} />
 
       {selected && (
         <ItemPanel

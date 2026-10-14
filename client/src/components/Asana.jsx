@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useLoad } from '../lib/useLoad.js';
-import { formatDateTime } from '../lib/format.js';
+import { STATE_LABELS } from '../../../shared/workflow.js';
+import { formatDate, formatDateTime } from '../lib/format.js';
 import ErrorNote from './ErrorNote.jsx';
 
 function useBusy(onDone) {
@@ -201,6 +202,146 @@ export function AsanaTaskLink({ item, project, editable, onChange }) {
       )}
       {message && <p className="muted small">{message}</p>}
       <ErrorNote error={error} />
+    </section>
+  );
+}
+
+/**
+ * The linked Asana project's tasks, to bring into the checklist: each is matched to an existing item (suggested when
+ * the names line up), added as a new item, or left out. Tasks already linked show the item they feed.
+ */
+export function AsanaTasks({ project, items, editable, onChange }) {
+  const status = useLoad('/api/asana/status');
+  const linked = Boolean(status.data?.configured && project.asana_project_gid);
+  const tasks = useLoad(linked ? `/api/projects/${project.id}/asana/tasks?v=${project.updated_at}` : null);
+  const [open, setOpen] = useState(false);
+  const [choices, setChoices] = useState({});
+  const [message, setMessage] = useState(null);
+  const { busy, error, run } = useBusy(async () => {
+    await tasks.reload();
+    await onChange();
+  });
+  if (!linked) return null;
+
+  const list = tasks.data?.tasks || [];
+  const waiting = list.filter((t) => !t.item);
+  const freeItems = items.filter((i) => !i.asana_task_gid);
+  const choiceOf = (t) => choices[t.gid] ?? (t.suggested ? t.suggested.id : 'new');
+  // An item can be matched to one task; a later row choosing the same item is left out.
+  const picked = [];
+  const plan = [];
+  for (const t of waiting) {
+    const c = choiceOf(t);
+    if (c === 'skip' || picked.includes(c)) continue;
+    if (c !== 'new') picked.push(c);
+    plan.push({ task: t.gid, item_id: c === 'new' ? null : c });
+  }
+  const adds = plan.filter((p) => !p.item_id).length;
+  const matches = plan.length - adds;
+
+  const apply = () => {
+    const parts = [matches && `match ${matches} to existing items`, adds && `add ${adds} as new checklist items`].filter(Boolean).join(' and ');
+    if (!window.confirm(`Bring in ${plan.length} Asana task${plan.length === 1 ? '' : 's'}: ${parts}? Their comments will show in Updates.`)) return;
+    run(async () => {
+      const res = await api(`/api/projects/${project.id}/asana/apply`, { method: 'POST', body: { links: plan } });
+      setChoices({});
+      setMessage(
+        `Matched ${res.linked}, added ${res.added}, and pulled ${res.pulled} comment${res.pulled === 1 ? '' : 's'}.` +
+          (res.skipped.length ? ` Skipped ${res.skipped.length}: ${res.skipped[0].reason}.` : ''),
+      );
+    });
+  };
+
+  return (
+    <section className="card flush asana-tasks" aria-label="Asana tasks">
+      <div className="row between pad-h asana-tasks-head">
+        <div>
+          <h2>Asana tasks</h2>
+          <p className="muted small">
+            {!tasks.data
+              ? tasks.error
+                ? ''
+                : 'Loading tasks from Asana…'
+              : `${list.length} task${list.length === 1 ? '' : 's'} in ${project.asana_project_name}: ${list.length - waiting.length} in the checklist, ${waiting.length} not yet.`}
+          </p>
+        </div>
+        {list.length > 0 && (
+          <button className="btn ghost small" onClick={() => setOpen(!open)} aria-expanded={open}>
+            {open ? 'Hide tasks' : editable && waiting.length ? 'Review and bring in' : 'Show tasks'}
+          </button>
+        )}
+      </div>
+      <div className="pad-h">
+        {tasks.error && <p className="error-text small">{tasks.error.message}</p>}
+        <ErrorNote error={error} />
+        {message && <p className="muted small">{message}</p>}
+      </div>
+      {open && (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Asana task</th>
+                  <th>Column</th>
+                  <th>In Aether</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((t) => (
+                  <tr key={t.gid}>
+                    <td>
+                      <a href={t.url} target="_blank" rel="noreferrer noopener">
+                        {t.name}
+                      </a>
+                      <div className="muted small">{[t.assignee, t.due_on && `due ${formatDate(t.due_on)}`].filter(Boolean).join(' · ')}</div>
+                    </td>
+                    <td className="small">
+                      {t.section || '—'}
+                      {t.completed && !/done|complete/i.test(t.section) && ' · done'}
+                    </td>
+                    <td className="small">
+                      {t.item ? (
+                        <span>
+                          ✓ Feeds <strong>{t.item.title}</strong>
+                        </span>
+                      ) : editable ? (
+                        <select value={choiceOf(t)} onChange={(e) => setChoices((c) => ({ ...c, [t.gid]: e.target.value }))} aria-label={`What to do with ${t.name}`}>
+                          <option value="new">Add as a new item ({STATE_LABELS[t.state]})</option>
+                          <option value="skip">Leave out</option>
+                          {freeItems.length > 0 && (
+                            <optgroup label="Match to an existing item">
+                              {freeItems.map((i) => (
+                                <option key={i.id} value={i.id}>
+                                  {i.title}
+                                  {t.suggested?.id === i.id ? ' (suggested)' : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      ) : (
+                        <span className="muted">Not in the checklist</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {editable && plan.length > 0 && (
+            <div className="row pad asana-tasks-apply">
+              <button className="btn primary" onClick={apply} disabled={busy}>
+                {busy ? 'Bringing in…' : `Bring in ${plan.length} task${plan.length === 1 ? '' : 's'}`}
+              </button>
+              <span className="muted small">
+                {[matches && `${matches} matched to existing items`, adds && `${adds} added as new items`].filter(Boolean).join(', ')}. New items start in the state
+                their Asana column suggests.
+              </span>
+            </div>
+          )}
+        </>
+      )}
     </section>
   );
 }

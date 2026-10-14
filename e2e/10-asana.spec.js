@@ -41,12 +41,29 @@ test('a project is linked to Asana and an item picks a task; its comments show i
   await expect(page.locator('.activity')).toContainText('2 new comments from Asana on "Mold design"');
 });
 
+test('the rest of the Asana tasks are reviewed and brought into the checklist in one go', async ({ page }) => {
+  await login(page, 'editor');
+  await nav(page, 'Projects');
+  await page.getByRole('link', { name: 'E2E Floodlight — US launch', exact: true }).click();
+  const card = page.getByRole('region', { name: 'Asana tasks' });
+  await expect(card).toContainText('3 tasks in Sample Cam · UK launch: 1 in the checklist, 2 not yet.');
+  await card.getByRole('button', { name: 'Review and bring in' }).click();
+  await expect(card.locator('tr', { hasText: 'Book UKCA testing' })).toContainText('Feeds Mold design');
+  await expect(card.getByLabel('What to do with Translate the manual')).toHaveValue('new');
+  await card.getByLabel('What to do with Order UK plugs').selectOption('skip');
+
+  await card.getByRole('button', { name: 'Bring in 1 task' }).click();
+  await expect(card).toContainText('Matched 0, added 1, and pulled 0 comments.');
+  await expect(card).toContainText('2 in the checklist, 1 not yet.');
+  await expect(page.getByRole('button', { name: 'Translate the manual', exact: true })).toBeVisible();
+});
+
 test('admins see Asana on the Integrations page', async ({ page }) => {
   await login(page, 'admin');
   await page.goto('/admin/integrations');
   const card = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Asana', exact: true }) });
   await expect(card).toContainText('Connected');
-  await expect(card).toContainText('1 project and 1 item linked');
+  await expect(card).toContainText('1 project and 2 items linked');
   await card.getByRole('button', { name: 'Pull from Asana' }).click();
-  await expect(card).toContainText('0 new comments from 1 linked task');
+  await expect(card).toContainText('0 new comments from 2 linked tasks');
 });
