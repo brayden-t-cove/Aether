@@ -7,6 +7,7 @@ import { formatDate, isOverdue } from '../lib/format.js';
 import ErrorNote from './ErrorNote.jsx';
 import StateBadge from './StateBadge.jsx';
 import ItemUpdates from './ItemUpdates.jsx';
+import { AsanaTaskLink } from './Asana.jsx';
 
 const toForm = (item) => ({
   title: item.title,
@@ -27,7 +28,7 @@ export function BlockerLink({ blocker, projectId }) {
   );
 }
 
-export default function ItemPanel({ item, projectId, allItems, users, stages = [], editable, onChange, onClose }) {
+export default function ItemPanel({ item, projectId, project, allItems, users, stages = [], editable, onChange, onClose }) {
   const [form, setForm] = useState(() => toForm(item));
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -117,6 +118,7 @@ export default function ItemPanel({ item, projectId, allItems, users, stages = [
       <div className="item-panel-body">
         <ErrorNote error={error} />
         <ItemUpdates item={item} editable={editable} onPosted={onChange} />
+        <AsanaTaskLink item={item} project={project} editable={editable} onChange={onChange} />
 
         {editable && (
           <form className="stack" onSubmit={save} aria-label={`Edit ${item.title}`}>

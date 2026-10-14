@@ -22,6 +22,8 @@ import { attachmentRoutes } from './routes/attachments.js';
 import { readinessRoutes } from './routes/readiness.js';
 import { createFileStore } from './lib/files.js';
 import { createOdysseyClient } from './lib/odyssey.js';
+import { createAsanaClient } from './lib/asana.js';
+import { asanaRoutes } from './routes/asana.js';
 import { vendorRoutes } from './routes/vendors.js';
 import { odysseyRoutes } from './routes/odyssey.js';
 import { testReportRoutes } from './routes/testReports.js';
@@ -39,7 +41,7 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Build the Express app. `db` is a pg Pool. Kept separate from index.js so
  * tests can create an app against a test database.
  */
-export function createApp({ db, config, odyssey = createOdysseyClient(config.odyssey), notify = createNotifier(config) }) {
+export function createApp({ db, config, odyssey = createOdysseyClient(config.odyssey), asana = createAsanaClient(config.asana), notify = createNotifier(config) }) {
   const app = express();
   const passport = configurePassport(db, config);
   const files = createFileStore(config);
@@ -102,10 +104,11 @@ export function createApp({ db, config, odyssey = createOdysseyClient(config.ody
   app.use(vendorRoutes({ db }));
   app.use(odysseyRoutes({ db, odyssey }));
   app.use(testReportRoutes({ db, files }));
+  app.use(asanaRoutes({ db, asana }));
   app.use(listingRoutes({ db }));
   app.use(returnRoutes({ db, notify }));
   app.use(comparisonRoutes({ db }));
-  app.use(integrationRoutes({ db, config, odyssey, notify, files }));
+  app.use(integrationRoutes({ db, config, odyssey, asana, notify, files }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 

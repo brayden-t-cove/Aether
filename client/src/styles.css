@@ -2379,3 +2379,37 @@ mark.matched {
   font-size: 0.9rem;
   padding: 0 0.3rem;
 }
+
+/* Asana: the project's link bar, the item panel's task link, and the tag on comments copied from Asana. */
+.asana-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  margin: -0.5rem 0 1rem;
+}
+.asana-bar .alert {
+  flex-basis: 100%;
+}
+.asana-mark {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #f06a6a;
+  box-shadow: 0.35rem 0.3rem 0 -0.08rem #f06a6a, -0.35rem 0.3rem 0 -0.08rem #f06a6a;
+  transform: scale(0.7) translateY(-0.2rem);
+  margin-right: 0.2rem;
+}
+.asana-task {
+  margin-top: 1rem;
+}
+.asana-task select,
+.asana-task input {
+  flex: 1;
+  min-width: 0;
+}
+.asana-tag {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  border-color: #f06a6a;
+}

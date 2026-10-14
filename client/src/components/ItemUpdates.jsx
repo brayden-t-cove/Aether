@@ -112,6 +112,7 @@ export function Update({ comment, canEdit, canDelete, onChanged, endpoint = '/ap
           </span>
         ) : null}
         {tag}
+        {comment.source === 'asana' && <span className="tag asana-tag">via Asana</span>}
         <span className="spacer" />
         {canEdit && !editing && (
           <button className="link-btn small" onClick={() => setEditing(true)}>
@@ -182,7 +183,14 @@ export default function ItemUpdates({ item, editable, onPosted }) {
       ) : (
         <ul className="update-list">
           {data.comments.map((c) => (
-            <Update key={c.id} comment={c} canEdit={editable && c.created_by === user?.id} canDelete={editable && (c.created_by === user?.id || can('admin'))} onChanged={changed} />
+            <Update
+              key={c.id}
+              comment={c}
+              // Comments from Asana are copies: they change in Asana, not here.
+              canEdit={editable && c.source !== 'asana' && c.created_by === user?.id}
+              canDelete={editable && c.source !== 'asana' && (c.created_by === user?.id || can('admin'))}
+              onChanged={changed}
+            />
           ))}
         </ul>
       )}
