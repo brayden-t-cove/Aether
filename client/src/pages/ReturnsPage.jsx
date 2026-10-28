@@ -6,23 +6,16 @@ import { useAuth } from '../lib/auth.jsx';
 import { useLoad } from '../lib/useLoad.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import { ProductSelect } from '../components/Pickers.jsx';
+import ProductMultiSelect from '../components/ProductMultiSelect.jsx';
+import { PERIODS, monthKey as monthOf, resolvePeriod, shiftMonth, todayKey, weeksForRange } from '../lib/returnPeriods.js';
 import { BlankNotesView, ChannelsView, WeekOverWeek } from './ReturnsTrends.jsx';
 import ReturnsOverview from './ReturnsOverview.jsx';
 
 const VIEWS = { overview: 'Overview', weekly: 'Week over week', channels: 'Amazon vs TikTok', blank: 'Blank notes' };
-const WEEKS = { 8: 'Last 8 weeks', 12: 'Last 12 weeks', 26: 'Last 26 weeks', 52: 'Last 52 weeks' };
+const WEEKS = { 8: 'Last 8 weeks', 12: 'Last 12 weeks', 26: 'Last 26 weeks', 52: 'Last 52 weeks', custom: 'Custom range' };
 const units = (n) => `${n} ${n === 1 ? 'unit' : 'units'}`;
 
-// Months as YYYY-MM. The overview shows one whole calendar month at a time.
-const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-const shiftMonth = (key, n) => {
-  const [y, m] = key.split('-').map(Number);
-  return monthKey(new Date(y, m - 1 + n, 1));
-};
-const lastDay = (key) => {
-  const [y, m] = key.split('-').map(Number);
-  return `${key}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-};
+// Months as YYYY-MM.
 const monthName = (key) => new Date(`${key}-01T00:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
 function Unmatched({ onAssigned }) {
@@ -76,30 +69,61 @@ export default function ReturnsPage() {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const view = Object.hasOwn(VIEWS, params.get('view') ?? '') ? params.get('view') : 'overview';
-  const thisMonth = monthKey(new Date());
-  const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '') && params.get('month') <= thisMonth ? params.get('month') : thisMonth;
+  const today = todayKey();
+  const thisMonth = monthOf(today);
+  // The overview's period: month to date by default, a preset, one month, or a custom range (see returnPeriods.js).
+  const period = resolvePeriod(params, today);
+  const month = period.month;
   const weeks = Object.hasOwn(WEEKS, params.get('weeks') ?? '') ? params.get('weeks') : '12';
   // Amazon vs TikTok compares the two channels, so it ignores the channel filter.
   const channel = view === 'channels' ? '' : params.get('channel') || '';
-  // The overview opens each product in place instead of filtering the page by one.
-  const productId = view === 'overview' ? '' : params.get('productId') || '';
-  const filters = { ...(channel && { channel }), ...(productId && { productId }) };
-  const monthQuery = { ...filters, from: `${month}-01`, to: lastDay(month) };
-  const { data, error, reload } = useLoad(
-    view === 'overview' ? `/api/returns/summary?${new URLSearchParams({ ...monthQuery, trendFrom: `${shiftMonth(month, -11)}-01` })}` : null,
-  );
+  // Products: any number, by Aether's names (?products=<id>,<id>; an old ?productId= link still works).
+  const productIds = [...new Set([...(params.get('products') || '').split(','), params.get('productId') || ''].filter(Boolean))];
+  const filters = { ...(channel && { channel }), ...(productIds.length && { products: productIds.join(',') }) };
+  const periodQuery = { ...filters, from: period.from, to: period.to };
+  const trendFrom = `${[shiftMonth(monthOf(period.to), -11), monthOf(period.from)].sort()[0]}-01`;
+  const { data, error, reload } = useLoad(view === 'overview' ? `/api/returns/summary?${new URLSearchParams({ ...periodQuery, trendFrom })}` : null);
   const codebook = useLoad(view === 'overview' ? '/api/returns/codebook' : null);
-  // ?end=YYYY-MM-DD shows the weeks up to that date instead of up to today.
+  // The weekly views: the last N weeks, or the weeks a custom range covers. ?end=YYYY-MM-DD shows the weeks up to that
+  // date instead of up to today.
+  const range = weeks === 'custom' && period.key === 'custom' ? weeksForRange(period.from, period.to) : null;
   const weekly = useLoad(
-    view === 'overview' ? null : `/api/returns/weekly?${new URLSearchParams({ ...filters, weeks, ...(params.get('end') && { end: params.get('end') }) })}`,
+    view === 'overview'
+      ? null
+      : `/api/returns/weekly?${new URLSearchParams({
+          ...filters,
+          weeks: range ? range.weeks : weeks === 'custom' ? '12' : weeks,
+          ...(range ? { end: range.end } : params.get('end') && { end: params.get('end') }),
+        })}`,
   );
 
-  const setFilter = (key, value) => {
+  const setFilter = (key, value) => setFilters({ [key]: value });
+  // Several URL parameters at once; an empty value removes one.
+  const setFilters = (changes) => {
     const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
     setParams(next);
   };
+  const pickPeriod = (key) => {
+    if (key === 'custom') setFilters({ period: 'custom', from: period.from, to: period.to, month: '' });
+    else if (key === 'month') setFilters({ period: '', from: '', to: '', month: month || thisMonth });
+    else setFilters({ period: key === 'mtd' ? '' : key, from: '', to: '', month: '' });
+  };
+  const pickMonth = (m) => setFilters({ period: '', from: '', to: '', month: m === thisMonth ? '' : m });
+  const pickWeeks = (w) => {
+    if (w === 'custom') setFilters({ weeks: 'custom', period: 'custom', from: period.from, to: period.to });
+    else setFilters({ weeks: w === '12' ? '' : w });
+  };
+  const customRange = (
+    <span className="row date-range" role="group" aria-label="Custom range">
+      <input type="date" value={period.from} max={period.to} onChange={(e) => e.target.value && setFilters({ period: 'custom', from: e.target.value })} aria-label="From" />
+      <span aria-hidden="true">–</span>
+      <input type="date" value={period.to} min={period.from} max={today} onChange={(e) => e.target.value && setFilters({ period: 'custom', to: e.target.value })} aria-label="To" />
+    </span>
+  );
 
   const t = data?.totals;
   const months = Array.from({ length: 24 }, (_, i) => shiftMonth(thisMonth, -i));
@@ -134,37 +158,52 @@ export default function ReturnsPage() {
       <div className="toolbar">
         <div className="row">
           {view === 'overview' ? (
-            <div className="month-picker" role="group" aria-label="Month">
-              <button className="btn ghost small icon-btn" onClick={() => setFilter('month', shiftMonth(month, -1))} aria-label="Previous month">
-                ‹
-              </button>
-              <select value={month} onChange={(e) => setFilter('month', e.target.value === thisMonth ? '' : e.target.value)} aria-label="Month to show">
-                {(months.includes(month) ? months : [month, ...months]).map((m) => (
-                  <option key={m} value={m}>
-                    {monthName(m)}
-                    {m === thisMonth ? ' (so far)' : ''}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn ghost small icon-btn"
-                onClick={() => setFilter('month', shiftMonth(month, 1) === thisMonth ? '' : shiftMonth(month, 1))}
-                disabled={month >= thisMonth}
-                aria-label="Next month"
-              >
-                ›
-              </button>
-            </div>          ) : (
-            <label className="inline">
-              Weeks
-              <select value={weeks} onChange={(e) => setFilter('weeks', e.target.value === '12' ? '' : e.target.value)}>
-                {Object.entries(WEEKS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              <label className="inline">
+                Period
+                <select value={period.key} onChange={(e) => pickPeriod(e.target.value)} aria-label="Period">
+                  {Object.entries(PERIODS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {month && (
+                <div className="month-picker" role="group" aria-label="Month">
+                  <button className="btn ghost small icon-btn" onClick={() => pickMonth(shiftMonth(month, -1))} aria-label="Previous month">
+                    ‹
+                  </button>
+                  <select value={month} onChange={(e) => pickMonth(e.target.value)} aria-label="Month to show">
+                    {(months.includes(month) ? months : [month, ...months]).map((m) => (
+                      <option key={m} value={m}>
+                        {monthName(m)}
+                        {m === thisMonth ? ' (so far)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn ghost small icon-btn" onClick={() => pickMonth(shiftMonth(month, 1))} disabled={month >= thisMonth} aria-label="Next month">
+                    ›
+                  </button>
+                </div>
+              )}
+              {period.key === 'custom' && customRange}
+              {!month && period.key !== 'custom' && <span className="muted small">{period.label}</span>}
+            </>
+          ) : (
+            <>
+              <label className="inline">
+                Weeks
+                <select value={weeks} onChange={(e) => pickWeeks(e.target.value)}>
+                  {Object.entries(WEEKS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {weeks === 'custom' && customRange}
+            </>
           )}
           {view !== 'channels' && (
             <label className="inline">
@@ -179,12 +218,7 @@ export default function ReturnsPage() {
               </select>
             </label>
           )}
-          {view !== 'overview' && (
-            <label className="inline">
-              Product
-              <ProductSelect value={productId} onChange={(id) => setFilter('productId', id)} emptyLabel="All" />
-            </label>
-          )}
+          <ProductMultiSelect value={productIds} onChange={(ids) => setFilters({ products: ids.join(','), productId: '' })} />
         </div>
       </div>
 
@@ -207,10 +241,10 @@ export default function ReturnsPage() {
         !error && <p className="muted">Loading…</p>
       ) : t.units === 0 ? (
         <div className="card empty">
-          <p className="muted">No returns in {monthName(month)} yet.</p>
+          <p className="muted">No returns in {period.label} yet.</p>
           {data.latestReturn && data.latestReturn.slice(0, 7) !== month && (
             <p>
-              <button className="link-btn" onClick={() => setFilter('month', data.latestReturn.slice(0, 7))}>
+              <button className="link-btn" onClick={() => pickMonth(data.latestReturn.slice(0, 7))}>
                 Show {monthName(data.latestReturn.slice(0, 7))}, the latest month with returns
               </button>
             </p>
@@ -223,7 +257,12 @@ export default function ReturnsPage() {
         </div>
       ) : (
         <>
-          <ReturnsOverview data={data} codebook={codebook.data.categories} query={monthQuery} monthName={monthName(month)} onCodebookChanged={codebook.reload} onReturnsChanged={reload} />
+          <ReturnsOverview
+            data={data}
+            codebook={codebook.data.categories}
+            query={periodQuery}
+            monthName={period.label}
+            trendEnd={monthName(monthOf(period.to))} onCodebookChanged={codebook.reload} onReturnsChanged={reload} />
         </>
       )}
 

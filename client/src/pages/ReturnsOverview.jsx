@@ -564,7 +564,7 @@ function OtherSection({ query }) {
   );
 }
 
-export default function ReturnsOverview({ data, codebook, query, monthName, onCodebookChanged, onReturnsChanged }) {
+export default function ReturnsOverview({ data, codebook, query, monthName, trendEnd = monthName, onCodebookChanged, onReturnsChanged }) {
   const [showTable, setShowTable] = useState(false);
   const [params, setParams] = useSearchParams();
   const t = data.totals;
@@ -769,7 +769,7 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
         ) : (
           <StackedColumns data={columns} series={usedSeries} ariaLabel="Units returned per month by channel" />
         )}
-        <p className="muted small">The 12 months up to {monthName}.</p>
+        <p className="muted small">The months up to {trendEnd}, from at least 12 months back.</p>
       </section>
     </>
   );

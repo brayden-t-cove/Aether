@@ -32,6 +32,11 @@ function readFilters(q) {
     to: DATE.test(q.to ?? '') ? q.to : undefined,
     channel: Object.hasOwn(CHANNELS, q.channel ?? '') ? q.channel : undefined,
     productId: isUuid(q.productId) ? q.productId : undefined,
+    // ?products=<id>,<id>: several products at once.
+    productIds: String(q.products ?? '')
+      .split(',')
+      .filter(isUuid)
+      .slice(0, 100),
     marketId: isUuid(q.marketId) ? q.marketId : undefined,
     flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
     blank: q.blank === '1',
