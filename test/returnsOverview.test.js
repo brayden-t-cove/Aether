@@ -113,7 +113,9 @@ describe.skipIf(!TEST_DATABASE_URL)('the Returns overview', () => {
     const { productBuckets, byProduct, byMonth } = await summary(`${SEPT}&trendFrom=2026-01-01`);
     expect(productBuckets.find((p) => p.bucket === 'connectivity').mentions).toBe(3);
     expect(byProduct[0]).toMatchObject({ reviews: 8, units: 9, noted_reviews: 7 });
-    expect(byMonth.map((m) => [m.month, m.units])).toEqual([['2026-08', 1], ['2026-09', 9]]);
+    const months = {};
+    for (const m of byMonth) months[m.month] = (months[m.month] || 0) + m.units;
+    expect(months).toEqual({ '2026-08': 1, '2026-09': 9 });
   });
 
   it('lists the reviews that mention a bucket or sub-reason, a review under each it mentions', async () => {

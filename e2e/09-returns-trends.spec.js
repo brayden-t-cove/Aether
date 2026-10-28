@@ -13,9 +13,11 @@ test('week over week compares the last two finished weeks by bucket', async ({ p
   expect(add.ok()).toBe(true);
   await page.goto('/returns?view=weekly&end=2026-09-20&weeks=8'); // Jul 27 to Sep 20
   await expect(page.getByRole('tab', { name: 'Week over week' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('Comparing the week of Sep 14–20 with Sep 7–13.')).toBeVisible();
+  await expect(page.getByText('Comparing the week of Wk 38 · Sep 14–20 with Wk 37 · Sep 7–13.')).toBeVisible();
   const table = page.getByRole('table', { name: 'Units by bucket per week' });
-  await expect(table.locator('tr', { hasText: /^Connectivity/ })).toContainText('01+1');
+  await expect(table.locator('tr', { hasText: /^Connectivity/ })).toContainText('01▲ +1');
+  // Rises are red, falls green.
+  await expect(table.locator('tr', { hasText: /^Connectivity/ }).locator('.trend-up')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Causes' })).toHaveCount(0);
   await expect(page.getByLabel('Customer match')).toHaveCount(0);
   await page.getByRole('button', { name: 'Show all 8 weeks' }).click();

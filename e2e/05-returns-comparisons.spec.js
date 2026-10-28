@@ -64,6 +64,10 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   await page.getByRole('button', { name: 'Show table' }).click();
   await expect(page.locator('th', { hasText: 'Total' })).toBeVisible();
   await page.getByRole('button', { name: 'Show chart' }).click();
+  // The same months split by product instead of channel.
+  await page.getByRole('button', { name: 'By product' }).click();
+  await expect(page.getByRole('img', { name: 'Units returned per month by product' })).toBeVisible();
+  await page.getByRole('button', { name: 'By channel' }).click();
 
   await page.getByRole('button', { name: 'Previous month' }).click();
   await expect(page.getByLabel('Month to show')).toHaveValue('2026-08');
@@ -80,6 +84,8 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   const bucket = page.getByRole('button', { name: /^Performance \/ Hardware/ });
   await expect(bucket).toContainText("The camera connects but doesn't do its job");
   await bucket.click();
+  // Which products its mentions come from, as a pie.
+  await expect(page.getByRole('img', { name: 'Performance / Hardware mentions by product' })).toBeVisible();
   const subs = page.getByRole('list', { name: 'Performance / Hardware by sub-reason' });
   await expect(subs).toContainText('Works briefly then dies');
   await expect(subs).toContainText('0 of 1 checked');

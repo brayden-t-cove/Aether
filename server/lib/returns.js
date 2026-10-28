@@ -83,8 +83,10 @@ export async function returnsSummary(db, opts = {}) {
     q(`SELECT c.key AS category_key, s.key, s.name, sum(r.quantity)::int AS units
          ${from} LEFT JOIN return_subreasons s ON s.id = r.subreason_id ${all.where} ${all.where ? 'AND' : 'WHERE'} c.set_aside
         GROUP BY c.key, s.key, s.name, c.sort_order, s.sort_order ORDER BY c.sort_order, s.sort_order`, all.params),
-    q(`SELECT to_char(date_trunc('month', r.return_date), 'YYYY-MM') AS month, r.channel, sum(r.quantity)::int AS units
-         ${from} ${trend.where} GROUP BY 1, 2 ORDER BY 1, 2`, trend.params),
+    // Units per month by channel and product, for the trend chart (shown by channel or by product).
+    q(`SELECT to_char(date_trunc('month', r.return_date), 'YYYY-MM') AS month, r.channel, r.product_id, COALESCE(tp.name, 'Unmatched') AS product_name,
+              sum(r.quantity)::int AS units
+         ${from} LEFT JOIN products tp ON tp.id = r.product_id ${trend.where} GROUP BY 1, 2, 3, 4 ORDER BY 1, 2`, trend.params),
     // Mentions per bucket, most first.
     q(`SELECT mm.bucket AS key, bc.name, count(*)::int AS mentions
          ${from} ${joinMentions} JOIN return_categories bc ON bc.key = mm.bucket ${where}
