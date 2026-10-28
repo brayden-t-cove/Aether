@@ -9,7 +9,10 @@ import { planReturnsImport, runReturnsImport } from './returnsImport.js';
 import { RETURNS_TZ } from './returns.js';
 import { messages } from './notify.js';
 
-export const AUTO_SOURCES = { amazon: { source: 'amazon_returns', label: 'Amazon', lock: 7_310_445 } };
+export const AUTO_SOURCES = {
+  amazon: { source: 'amazon_returns', label: 'Amazon', lock: 7_310_445 },
+  tiktok: { source: 'tiktok_returns', label: 'TikTok', lock: 7_310_446 },
+};
 // How far back each run looks. Amazon adds returns to the report as they're processed, sometimes days later.
 export const DEFAULT_DAYS = 14;
 
@@ -52,9 +55,11 @@ export async function runAutoImport(pool, { channel, client, from, to, trigger =
     }
     const created = record?.created_count ?? 0;
     if (created) notify?.send(messages.returnsImported(notify, { count: created, units, channel: src.label, who: userId ? 'Someone' : 'Automatic import' }));
+    // TikTok's client lists the fields its API sent (names only), to confirm the mapping against a live response.
+    const detail = rows.fields?.length ? `Fields ${src.label} sent: ${rows.fields.join(', ')}`.slice(0, 2000) : '';
     const { rows: done } = await pool.query(
-      'UPDATE sync_runs SET finished_at = now(), ok = true, rows_read = $2, returns_created = $3, import_id = $4 WHERE id = $1 RETURNING *',
-      [runId, rows.length, created, record?.id ?? null],
+      'UPDATE sync_runs SET finished_at = now(), ok = true, rows_read = $2, returns_created = $3, import_id = $4, detail = $5 WHERE id = $1 RETURNING *',
+      [runId, rows.length, created, record?.id ?? null, detail],
     );
     return { ...done[0], from, to, created, rows: rows.length };
   } catch (err) {
@@ -70,7 +75,7 @@ export async function runAutoImport(pool, { channel, client, from, to, trigger =
 export async function lastAutoImports(db, channel, limit = 5) {
   const { source } = AUTO_SOURCES[channel];
   const { rows } = await db.query(
-    `SELECT r.id, r.trigger, r.started_at, r.finished_at, r.ok, r.error, r.rows_read, r.returns_created, r.import_id, u.name AS started_by_name
+    `SELECT r.id, r.trigger, r.started_at, r.finished_at, r.ok, r.error, r.rows_read, r.returns_created, r.import_id, r.detail, u.name AS started_by_name
        FROM sync_runs r LEFT JOIN users u ON u.id = r.started_by
       WHERE r.source = $1 ORDER BY r.started_at DESC LIMIT $2`,
     [source, limit],

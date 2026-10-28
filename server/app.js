@@ -24,6 +24,7 @@ import { createFileStore } from './lib/files.js';
 import { createOdysseyClient } from './lib/odyssey.js';
 import { createAsanaClient } from './lib/asana.js';
 import { createAmazonSpClient } from './lib/amazonSp.js';
+import { createTiktokShopClient, tokenStore } from './lib/tiktokShop.js';
 import { asanaRoutes } from './routes/asana.js';
 import { myWorkRoutes } from './routes/myWork.js';
 import { vendorRoutes } from './routes/vendors.js';
@@ -43,7 +44,8 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Build the Express app. `db` is a pg Pool. Kept separate from index.js so
  * tests can create an app against a test database.
  */
-export function createApp({ db, config, odyssey = createOdysseyClient(config.odyssey), asana = createAsanaClient(config.asana), amazon = createAmazonSpClient(config.amazonSp), notify = createNotifier(config) }) {
+export function createApp({ db, config, odyssey = createOdysseyClient(config.odyssey), asana = createAsanaClient(config.asana), amazon = createAmazonSpClient(config.amazonSp), tiktok, notify = createNotifier(config) }) {
+  if (tiktok === undefined) tiktok = createTiktokShopClient({ ...config.tiktokShop, store: tokenStore(db) });
   const app = express();
   const passport = configurePassport(db, config);
   const files = createFileStore(config);
@@ -109,9 +111,9 @@ export function createApp({ db, config, odyssey = createOdysseyClient(config.ody
   app.use(asanaRoutes({ db, asana }));
   app.use(myWorkRoutes({ db }));
   app.use(listingRoutes({ db }));
-  app.use(returnRoutes({ db, notify, amazon }));
+  app.use(returnRoutes({ db, notify, amazon, tiktok, config }));
   app.use(comparisonRoutes({ db }));
-  app.use(integrationRoutes({ db, config, odyssey, asana, amazon, notify, files }));
+  app.use(integrationRoutes({ db, config, odyssey, asana, amazon, tiktok, notify, files }));
 
   app.use(['/api', '/auth'], (req, res) => res.status(404).json({ error: 'Not found' }));
 

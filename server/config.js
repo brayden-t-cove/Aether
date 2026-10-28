@@ -59,6 +59,15 @@ export const config = {
     marketplaceId: process.env.AMAZON_SP_MARKETPLACE_ID || 'ATVPDKIKX0DER',
     syncHours: Number(process.env.AMAZON_SP_SYNC_HOURS) || 12,
   },
+  // TikTok Shop Open API, read-only: the shop's returns, imported automatically. App key and secret from an app in
+  // TikTok Shop Partner Center; the shop is authorized from Admin → Integrations (or TIKTOK_REFRESH_TOKEN).
+  tiktokShop: {
+    appKey: process.env.TIKTOK_APP_KEY || '',
+    appSecret: process.env.TIKTOK_APP_SECRET || '',
+    refreshToken: process.env.TIKTOK_REFRESH_TOKEN || '',
+    shopCipher: process.env.TIKTOK_SHOP_CIPHER || '',
+    syncHours: Number(process.env.TIKTOK_SYNC_HOURS) || 12,
+  },
   // Asana, read-only: a personal access token, whose owner's view of Asana is what Aether can read.
   asana: {
     token: process.env.ASANA_TOKEN || '',

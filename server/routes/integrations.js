@@ -19,7 +19,7 @@ async function linkedCounts(db) {
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
 /** Admin view of what's connected, with test buttons. Never returns secrets. */
-export function integrationRoutes({ db, config, odyssey, asana, amazon = null, notify, files }) {
+export function integrationRoutes({ db, config, odyssey, asana, amazon = null, tiktok = null, notify, files }) {
   const router = Router();
 
   router.get(
@@ -36,6 +36,14 @@ export function integrationRoutes({ db, config, odyssey, asana, amazon = null, n
         app: { env: config.appEnv, version, publicUrl: config.publicUrl, googleSignIn: config.google.enabled },
         odyssey: { configured: Boolean(odyssey), url: odyssey?.url ?? null, syncMinutes: config.odyssey.syncMinutes, ...sync },
         amazon: { configured: Boolean(amazon), syncHours: config.amazonSp?.syncHours ?? 12, marketplaceId: amazon?.marketplaceId ?? null, ...(await lastAutoImports(db, 'amazon', 5)) },
+        tiktok: {
+          configured: Boolean(tiktok),
+          syncHours: config.tiktokShop?.syncHours ?? 12,
+          // Set as the app's redirect URL in TikTok Shop Partner Center.
+          callbackUrl: `${config.publicUrl}/api/integrations/tiktok/callback`,
+          ...(tiktok ? await tiktok.status() : { authorized: false }),
+          ...(await lastAutoImports(db, 'tiktok', 5)),
+        },
         asana: { configured: Boolean(asana), syncMinutes: config.asana.syncMinutes, linked: await linkedCounts(db), ...asanaPulls },
         slack: { configured: notify.enabled, digestHourUtc: config.slack.digestHourUtc, lastDigestDate: digest.rows[0]?.value ?? null },
         uploads: { enabled: Boolean(files), maxUploadMb: config.maxUploadMb },

@@ -60,7 +60,7 @@ const publicPlan = (plan) => ({
   })),
 });
 
-export function returnRoutes({ db, notify, amazon = null }) {
+export function returnRoutes({ db, notify, amazon = null, tiktok = null }) {
   const router = Router();
 
   router.get(
@@ -159,11 +159,24 @@ export function returnRoutes({ db, notify, amazon = null }) {
   );
 
   // Automatic imports from marketplace APIs: whether each is set up, and its latest runs.
+  const autoClients = { amazon, tiktok };
+  const NOT_SET_UP = {
+    amazon: "Amazon isn't connected yet (AMAZON_SP_CLIENT_ID, _CLIENT_SECRET, _REFRESH_TOKEN)",
+    tiktok: "TikTok isn't connected yet (TIKTOK_APP_KEY, TIKTOK_APP_SECRET)",
+  };
   router.get(
     '/api/returns/auto-imports',
     requireAuth,
     asyncHandler(async (req, res) => {
-      res.json({ amazon: { configured: Boolean(amazon), ...(await lastAutoImports(db, 'amazon', 5)) } });
+      const [amazonRuns, tiktokRuns, tiktokStatus] = await Promise.all([
+        lastAutoImports(db, 'amazon', 5),
+        lastAutoImports(db, 'tiktok', 5),
+        tiktok ? tiktok.status() : null,
+      ]);
+      res.json({
+        amazon: { configured: Boolean(amazon), ...amazonRuns },
+        tiktok: { configured: Boolean(tiktok), authorized: Boolean(tiktokStatus?.authorized), shop: tiktokStatus?.shop ?? null, ...tiktokRuns },
+      });
     }),
   );
 
@@ -172,16 +185,39 @@ export function returnRoutes({ db, notify, amazon = null }) {
     '/api/returns/auto-imports/:channel',
     requireRole('editor'),
     asyncHandler(async (req, res) => {
-      if (req.params.channel !== 'amazon') throw new HttpError(404, 'No automatic import for that channel yet');
-      if (!amazon) throw new HttpError(503, "Amazon isn't connected yet (AMAZON_SP_CLIENT_ID, _CLIENT_SECRET, _REFRESH_TOKEN)");
+      const channel = req.params.channel;
+      if (!Object.hasOwn(autoClients, channel)) throw new HttpError(404, 'No automatic import for that channel');
+      const client = autoClients[channel];
+      // Integration problems are answered with their message (the error handler hides 5xx messages).
+      if (!client) return res.status(503).json({ error: NOT_SET_UP[channel] });
       const from = DATE.test(req.body?.from ?? '') ? req.body.from : undefined;
       const to = DATE.test(req.body?.to ?? '') ? req.body.to : undefined;
       if (from && to && from > to) throw new HttpError(400, 'The start date is after the end date');
-      const run = await runAutoImport(db, { channel: 'amazon', client: amazon, from, to, trigger: 'manual', userId: req.user.id, notify });
+      const run = await runAutoImport(db, { channel, client, from, to, trigger: 'manual', userId: req.user.id, notify });
       if (run.skipped) throw new HttpError(409, 'An import is already running. Try again in a few minutes.');
-      if (run.ok === false) throw new HttpError(502, run.error);
-      const message = run.rows ? `${run.created} new of ${run.rows} rows from Amazon (${run.from} to ${run.to}); the rest were already imported.` : `No returns from Amazon for ${run.from} to ${run.to}.`;
+      if (run.ok === false) return res.status(502).json({ error: run.error, run });
+      const name = CHANNELS[channel];
+      const message = run.rows ? `${run.created} new of ${run.rows} rows from ${name} (${run.from} to ${run.to}); the rest were already imported.` : `No returns from ${name} for ${run.from} to ${run.to}.`;
       res.json({ run, message });
+    }),
+  );
+
+  // TikTok sends an admin back here after they authorize the shop for Aether's app (the app's redirect URL in Partner
+  // Center is <PUBLIC_URL>/api/integrations/tiktok/callback). The code is swapped for tokens, which Aether keeps.
+  router.get(
+    '/api/integrations/tiktok/callback',
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      if (!tiktok) return res.status(503).json({ error: NOT_SET_UP.tiktok });
+      const code = typeof req.query.code === 'string' ? req.query.code : '';
+      if (!code) throw new HttpError(400, 'TikTok sent no authorization code');
+      try {
+        await tiktok.authorize(code);
+      } catch (err) {
+        return res.redirect(`/admin/integrations?tiktok=${encodeURIComponent(err.message)}`);
+      }
+      await logActivity(db, { entityType: 'returns', entityId: 'tiktok', action: 'tiktok_authorized', changes: { label: 'TikTok Shop' }, userId: req.user.id });
+      res.redirect('/admin/integrations?tiktok=connected');
     }),
   );
 

@@ -5,7 +5,8 @@ same steps as an upload: Amazon's units grouped per order, duplicates skipped (s
 matched by listing, and buyers' notes sorted into mentions. New returns count straight away; corrections happen on
 **Returns → Review returns** as before.
 
-Status and recent runs: **Returns → Import returns** (Automatic imports) and **Admin → Integrations**.
+Status and recent runs: **Returns → Import returns** (Automatic imports) and **Admin → Integrations**. Both Amazon and
+TikTok are built; each turns on when its keys are set.
 
 ## Amazon (Selling Partner API)
 
@@ -45,8 +46,41 @@ Amazon builds each report before it can be downloaded, which takes about a minut
 Amazon expires app client secrets periodically. When that happens, imports fail with "Amazon refused the app's keys";
 generate a new secret on the app and update `AMAZON_SP_CLIENT_SECRET`.
 
-## TikTok Shop
+## TikTok Shop (Open API)
 
-Not built yet. TikTok's returns API needs an app in TikTok Shop Partner Center (partner.tiktokshop.com) with the
-Return & Refund scope, and its field names (including where the buyer's note is) have to be checked against TikTok's
-documentation before Aether relies on them. Until then, upload TikTok's returns export on **Import returns**.
+What Aether reads: the shop's **returns** (the returns search, API version 202309): each return request with its order,
+items, reason, status and the buyer's note, mapped to the same columns as TikTok's returns export, so it imports the
+same way. A request covering several items is one return (one piece of feedback) with each item counted in its
+quantity. Every status is kept, as in the export, including requests the buyer cancelled or the seller rejected.
+Nothing is written to TikTok.
+
+How often: every `TIKTOK_SYNC_HOURS` hours (default 12), covering the last 14 days, plus **Import now**.
+
+### Setting it up
+
+1. **App**: in TikTok Shop Partner Center (partner.tiktokshop.com), signed in with the seller account, create a
+   **custom (in-house) app** for your own shop with the **Return & Refund** scope (and **Order** if offered). TikTok
+   reviews it.
+2. **Keys**: from the app, the **App key** and **App secret**. In Railway → Aether → **Variables**, add
+   `TIKTOK_APP_KEY` and `TIKTOK_APP_SECRET`. Redeploy.
+3. **Redirect URL**: **Admin → Integrations** now shows a TikTok card with the address to use, ending
+   `/api/integrations/tiktok/callback`. Set it as the app's redirect URL in Partner Center.
+4. **Authorize the shop**: signed in to Aether as an admin, open the app's authorization link from Partner Center and
+   approve it for the shop. TikTok sends you back to Integrations, which shows **Connected**. Aether keeps the tokens
+   and refreshes them itself. (Alternatively set `TIKTOK_REFRESH_TOKEN`, and `TIKTOK_SHOP_CIPHER` if you have it.)
+5. **Import now** on the TikTok card to check it.
+
+### Checking the first real run
+
+TikTok's documentation wasn't reachable when this was built, so the request signing, tokens and returns search
+follow TikTok's API as known then, and were tested against a stand-in, not TikTok itself. Two things to confirm on the
+first real run, from the run's line on **Admin → Integrations**, which lists the field names TikTok sent (names only,
+no customer data):
+
+- **The buyer's note.** Aether reads it from the first of `buyer_remarks`, `buyer_remark`, `return_reason_description`,
+  `description`, `buyer_note`, `remark`. If TikTok calls it something else, add that name to `NOTE_FIELDS` in
+  `server/lib/tiktokShop.js`. Until then, uploading TikTok's export still fills in notes on returns imported without
+  one.
+- **Items**: `return_line_items` with `product_name`, `seller_sku`, `sku_id`, `product_id`.
+
+If a call is refused, the run's error says why (signature, token or shop).

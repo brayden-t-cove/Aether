@@ -106,13 +106,15 @@ export function describeActivity(a) {
       break;
     case 'returns':
       if (a.action === 'sorted') return `${who} re-sorted returns (${c.sorted} sorted, ${c.unsorted} left for review)`;
+      if (a.action === 'tiktok_authorized') return `${who} connected the TikTok shop for automatic returns imports`;
       if (a.action === 'matches_uploaded') return `${who} uploaded customer matches from ${label} (${c.added} new, ${c.changed} changed)`;
       break;
     case 'return_category':
       if (a.action === 'definition_updated') return `${who} updated the definition of ${label}`;
       break;
     case 'returns_import':
-      if (a.action === 'imported') return `${who} imported ${c.rows} ${c.channel} returns (${c.units} units)`;
+      // Automatic imports from marketplace APIs have no person behind them.
+      if (a.action === 'imported') return `${a.user_name ? `${who} imported` : 'Automatic import:'} ${c.rows} ${c.channel} returns (${c.units} units)`;
       if (a.action === 'deleted') return `${who} undid a returns import (${c.rows} returns)`;
       break;
     case 'comparison':
