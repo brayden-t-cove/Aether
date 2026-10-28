@@ -6,7 +6,9 @@ import { logActivity } from '../lib/activity.js';
 import {
   createUser,
   findUserById,
+  getUserWithTeams,
   listUsers,
+  setUserTeams,
   normalizeEmail,
   publicUser,
   setPassword,
@@ -31,9 +33,11 @@ function validateFields(body, { creating }) {
     if (!ROLES.includes(body.role)) throw new HttpError(400, `Role must be one of: ${ROLES.join(', ')}`);
     out.role = body.role;
   }
-  if ('team' in body) {
-    if (body.team !== null && !Object.hasOwn(TEAMS, body.team)) throw new HttpError(400, 'Unknown team');
-    out.team = body.team;
+  // Teams: a list (people wear several hats). A single `team` is still accepted and means just that one.
+  if ('teams' in body || 'team' in body) {
+    const teams = 'teams' in body ? body.teams : body.team === null ? [] : [body.team];
+    if (!Array.isArray(teams) || teams.some((t) => !Object.hasOwn(TEAMS, t))) throw new HttpError(400, 'Unknown team');
+    out.teams = [...new Set(teams)];
   }
   if ('active' in body) {
     if (typeof body.active !== 'boolean') throw new HttpError(400, 'Active must be true or false');
@@ -67,13 +71,15 @@ export function userRoutes({ db }) {
     '/api/admin/users',
     requireRole('admin'),
     asyncHandler(async (req, res) => {
-      const fields = validateFields(req.body || {}, { creating: true });
-      const user = await createUser(db, { ...fields, invitedBy: req.user.id });
+      const { teams = [], ...fields } = validateFields(req.body || {}, { creating: true });
+      const created = await createUser(db, { ...fields, invitedBy: req.user.id });
+      await setUserTeams(db, created.id, teams);
+      const user = await getUserWithTeams(db, created.id);
       await logActivity(db, {
         entityType: 'user',
         entityId: user.id,
         action: 'invited',
-        changes: { email: user.email, role: user.role, team: user.team },
+        changes: { email: user.email, role: user.role, teams: user.teams },
         userId: req.user.id,
       });
       res.status(201).json({ user: publicUser(user) });
@@ -84,8 +90,8 @@ export function userRoutes({ db }) {
     '/api/admin/users/:id',
     requireRole('admin'),
     asyncHandler(async (req, res) => {
-      const { email: _email, password: _password, ...fields } = validateFields(req.body || {}, { creating: false });
-      const existing = await findUserById(db, req.params.id);
+      const { email: _email, password: _password, teams, ...fields } = validateFields(req.body || {}, { creating: false });
+      const existing = await getUserWithTeams(db, req.params.id);
       if (!existing) throw new HttpError(404, 'User not found');
 
       // Guard against an admin locking themselves out.
@@ -93,11 +99,16 @@ export function userRoutes({ db }) {
         throw new HttpError(400, 'You cannot remove your own admin access');
       }
 
-      const updated = await updateUser(db, existing.id, fields);
+      await updateUser(db, existing.id, fields);
       const changes = {};
       for (const [key, value] of Object.entries(fields)) {
         if (existing[key] !== value) changes[key] = { from: existing[key], to: value };
       }
+      if (teams && [...teams].sort().join() !== existing.teams.join()) {
+        await setUserTeams(db, existing.id, teams);
+        changes.teams = { from: existing.teams, to: teams };
+      }
+      const updated = await getUserWithTeams(db, existing.id);
       if (Object.keys(changes).length) {
         await logActivity(db, { entityType: 'user', entityId: existing.id, action: 'updated', changes, userId: req.user.id });
       }

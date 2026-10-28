@@ -12,6 +12,7 @@ export function publicUser(row) {
     avatarUrl: row.avatar_url,
     role: row.role,
     team: row.team,
+    teams: row.teams ?? (row.team ? [row.team] : []),
     active: row.active,
     hasPassword: Boolean(row.password_hash),
     googleLinked: Boolean(row.google_id),
@@ -32,9 +33,24 @@ export async function findUserByEmail(db, email) {
   return rows[0] || null;
 }
 
+const TEAMS_SQL = 'ARRAY(SELECT t.team FROM user_teams t WHERE t.user_id = users.id ORDER BY t.team) AS teams';
+
 export async function listUsers(db) {
-  const { rows } = await db.query('SELECT * FROM users ORDER BY active DESC, name, email');
+  const { rows } = await db.query(`SELECT *, ${TEAMS_SQL} FROM users ORDER BY active DESC, name, email`);
   return rows;
+}
+
+/** A user with their teams, for showing them. */
+export async function getUserWithTeams(db, id) {
+  const { rows } = await db.query(`SELECT *, ${TEAMS_SQL} FROM users WHERE id = $1`, [id]);
+  return rows[0] || null;
+}
+
+/** Replace a user's teams. Their first team is also kept in users.team. */
+export async function setUserTeams(db, userId, teams) {
+  await db.query('DELETE FROM user_teams WHERE user_id = $1', [userId]);
+  for (const team of teams) await db.query('INSERT INTO user_teams (user_id, team) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, team]);
+  await db.query('UPDATE users SET team = $2 WHERE id = $1', [userId, teams[0] ?? null]);
 }
 
 export async function createUser(db, { email, name = '', role = 'viewer', team = null, password, invitedBy = null }) {
@@ -45,6 +61,7 @@ export async function createUser(db, { email, name = '', role = 'viewer', team =
      RETURNING *`,
     [normalizeEmail(email), name.trim(), role, team, passwordHash, invitedBy],
   );
+  if (team) await db.query('INSERT INTO user_teams (user_id, team) VALUES ($1, $2) ON CONFLICT DO NOTHING', [rows[0].id, team]);
   return rows[0];
 }
 

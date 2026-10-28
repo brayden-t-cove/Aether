@@ -3,8 +3,8 @@ import { listActivity } from './activity.js';
 import { LATEST_COMMENT_SQL } from './comments.js';
 import { EXPIRY_WARNING_DAYS } from '../../shared/workflow.js';
 
-const ITEM_SELECT = `
-  SELECT i.id, i.title, i.state, i.category, i.due_date, i.project_id,
+export const ITEM_SELECT = `
+  SELECT i.id, i.title, i.state, i.category, i.team, i.owner_id, i.due_date, i.project_id,
          p.name AS project_name, u.name AS owner_name,
          ARRAY(
            SELECT b.title FROM item_dependencies d

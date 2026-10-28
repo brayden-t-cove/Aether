@@ -1,4 +1,5 @@
 import { ITEM_CATEGORIES, STATES } from '../../shared/workflow.js';
+import { CATEGORY_TEAMS, TEAMS } from '../../shared/roles.js';
 import { HttpError } from './http.js';
 import { v } from './validate.js';
 
@@ -11,6 +12,8 @@ export const ITEM_FIELDS = {
   due_date: v.date({ label: 'Due date' }),
   evidence_url: v.url({ label: 'Evidence link' }),
   position: v.int({ label: 'Position' }),
+  // Who it's for. Null means no team; left out on create, it follows the category.
+  team: (value) => (value === null || value === '' ? null : v.oneOf(TEAMS, { label: 'Team' })(value)),
 };
 
 const COLUMNS = Object.keys(ITEM_FIELDS);
@@ -46,16 +49,17 @@ export async function createItem(db, projectId, fields, userId) {
     [projectId],
   );
   const state = fields.state ?? 'not_started';
+  const category = fields.category ?? 'other';
   const { rows } = await db.query(
     `INSERT INTO checklist_items
-       (project_id, title, stage, category, owner_id, state, due_date, evidence_url, position, completed_at, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (project_id, title, stage, category, owner_id, state, due_date, evidence_url, position, completed_at, created_by, team)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       projectId,
       fields.title,
       fields.stage ?? '',
-      fields.category ?? 'other',
+      category,
       fields.owner_id ?? null,
       state,
       fields.due_date ?? null,
@@ -63,13 +67,24 @@ export async function createItem(db, projectId, fields, userId) {
       fields.position ?? pos[0].next,
       state === 'done' ? new Date() : null,
       userId,
+      'team' in fields ? fields.team : CATEGORY_TEAMS[category] ?? null,
     ],
   );
+  if (rows[0].owner_id) await addProjectMember(db, projectId, rows[0].owner_id, userId);
   return rows[0];
+}
+
+/** Someone given an item, or added by hand, joins the project's people. */
+export async function addProjectMember(db, projectId, memberId, addedBy = null) {
+  await db.query('INSERT INTO project_members (project_id, user_id, added_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [projectId, memberId, addedBy]);
 }
 
 export async function updateItem(db, item, fields) {
   if (fields.state === 'done' && item.state !== 'done') await assertCanComplete(db, item.id);
+  // A new category moves the item to that category's team, unless someone had picked a team by hand.
+  if ('category' in fields && !('team' in fields) && item.team === (CATEGORY_TEAMS[item.category] ?? null)) {
+    fields = { ...fields, team: CATEGORY_TEAMS[fields.category] ?? null };
+  }
 
   const sets = [];
   const params = [];
@@ -88,6 +103,7 @@ export async function updateItem(db, item, fields) {
     `UPDATE checklist_items SET ${sets.join(', ')}, updated_at = now() WHERE id = $${params.length} RETURNING *`,
     params,
   );
+  if (fields.owner_id) await addProjectMember(db, item.project_id, fields.owner_id);
   return rows[0];
 }
 

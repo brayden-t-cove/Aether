@@ -49,6 +49,10 @@ export function describeActivity(a) {
       if (a.action === 'asana_unlinked') return `${who} unlinked ${label} from Asana`;
       if (a.action === 'item_asana_linked') return `${who} linked ${label} to Asana task "${c.asana}"`;
       if (a.action === 'item_asana_unlinked') return `${who} unlinked ${label} from Asana`;
+      if (a.action === 'members_updated') {
+        const parts = [c.added?.length && `added ${c.added.join(', ')}`, c.removed?.length && `removed ${c.removed.join(', ')}`].filter(Boolean);
+        return `${who} ${parts.join(' and ')} on ${label}`;
+      }
       if (a.action === 'asana_tasks_applied')
         return `${who} brought Asana tasks into the checklist: ${c.linked} matched to items, ${c.added} added as new items`;
       if (a.action === 'asana_comments') return `${c.count} new comment${c.count === 1 ? '' : 's'} from Asana on ${label}`;

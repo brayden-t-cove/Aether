@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { teamNames } from '../components/TeamPicker.jsx';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PROJECT_TYPES } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
@@ -32,6 +33,8 @@ export default function NewProjectPage() {
     type: params.get('market') ? 'launch' : 'new_product',
     description: '',
   });
+  // Everyone the project touches. You and the owner are always on it.
+  const [memberIds, setMemberIds] = useState([]);
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [error, setError] = useState(null);
@@ -75,7 +78,7 @@ export default function NewProjectPage() {
     try {
       const { project } = await api('/api/projects', {
         method: 'POST',
-        body: { ...form, name, template: form.template || null },
+        body: { ...form, name, template: form.template || null, member_ids: memberIds },
       });
       navigate(`/projects/${project.id}`);
     } catch (err) {
@@ -213,6 +216,31 @@ export default function NewProjectPage() {
             Description
             <textarea rows={3} value={form.description} onChange={set('description')} />
           </label>
+
+          <fieldset className="people-field">
+            <legend>
+              People <span className="muted small">(everyone this project touches: their teams will see its work)</span>
+            </legend>
+            <div className="team-picker">
+              {users.data.users
+                .filter((u) => u.active && u.id !== user.id && u.id !== form.owner_id)
+                .map((u) => {
+                  const on = memberIds.includes(u.id);
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      className={`chip ${on ? 'chip-on' : ''}`}
+                      aria-pressed={on}
+                      title={teamNames(u.teams)}
+                      onClick={() => setMemberIds((ids) => (on ? ids.filter((x) => x !== u.id) : [...ids, u.id]))}
+                    >
+                      {u.name || u.email}
+                    </button>
+                  );
+                })}
+            </div>
+          </fieldset>
 
           <div className="row">
             <button className="btn primary" disabled={saving}>
