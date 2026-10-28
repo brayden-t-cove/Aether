@@ -1,11 +1,11 @@
 /**
- * The Returns overview for one calendar month. A review is one buyer's return; its note can mention several
- * problems, and each mention counts in its bucket. Three counters: reviews, mentions per bucket, and reviews that
+ * The Returns overview for one calendar month. Feedback is one buyer's return; its note can mention several
+ * problems, and each mention counts in its bucket. Three counters: feedback, mentions per bucket, and feedback that
  * mention more than one thing. Also: what each bucket means (and every mention behind it, to check or re-file),
  * how far the reason picked on the platform matches the note, each product's reviews, and notes that fit no bucket.
  */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { BUCKETS, OTHER_BUCKET, expectedBuckets } from '../../../shared/returnBuckets.js';
 import { CHANNELS } from '../../../shared/workflow.js';
 import { api } from '../lib/api.js';
@@ -17,7 +17,8 @@ import ErrorNote from '../components/ErrorNote.jsx';
 import { Donut, HBars, StackedColumns } from '../components/Charts.jsx';
 
 const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const reviewsText = (n) => count(n, 'review', 'reviews');
+// "Feedback" is one buyer's return (one per Amazon order, however many units), with or without a comment.
+const reviewsText = (n) => `${n} feedback`;
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 const SERIES = [
   { key: 'amazon', label: 'Amazon', color: '--series-1' },
@@ -87,17 +88,20 @@ function Highlighted({ note, why }) {
   );
 }
 
-/** A picker of every bucket's sub-reasons, as "category/subreason" values. */
-function SubreasonSelect({ options, value, onChange, label, exclude, disabled }) {
+/**
+ * A picker of every bucket's sub-reasons, as "category/subreason" values. `taken` buckets already have a mention on
+ * this feedback, so they're shown greyed out: a piece of feedback holds one mention per bucket.
+ */
+function SubreasonSelect({ options, value, onChange, label, exclude, taken = [], disabled }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} disabled={disabled}>
       <option value="">{label}…</option>
       {options.map((c) => (
-        <optgroup key={c.key} label={c.name}>
+        <optgroup key={c.key} label={taken.includes(c.key) ? `${c.name} (already mentioned)` : c.name}>
           {c.subreasons
             .filter((s) => `${c.key}/${s.key}` !== exclude)
             .map((s) => (
-              <option key={s.key} value={`${c.key}/${s.key}`}>
+              <option key={s.key} value={`${c.key}/${s.key}`} disabled={taken.includes(c.key)}>
                 {s.name}
               </option>
             ))}
@@ -162,13 +166,28 @@ function MentionedReview({ r, bucketKey, options, onChanged }) {
           )}
           {mention ? (
             <>
-              <SubreasonSelect options={options} value={refile} onChange={setRefile} label="Re-file as" exclude={`${mention.category}/${mention.subreason}`} disabled={busy} />
+              <SubreasonSelect
+                options={options}
+                value={refile}
+                onChange={setRefile}
+                label="Re-file as"
+                exclude={`${mention.category}/${mention.subreason}`}
+                taken={others.map((m) => m.category)}
+                disabled={busy}
+              />
               <button className="btn small" onClick={() => act('refile', refile)} disabled={!refile || busy}>
                 Re-file
               </button>
             </>
           ) : null}
-          <SubreasonSelect options={options} value={also} onChange={setAlso} label={mention ? 'Also mentions' : 'File as'} disabled={busy} />
+          <SubreasonSelect
+            options={options}
+            value={also}
+            onChange={setAlso}
+            label={mention ? 'Also mentions' : 'File as'}
+            taken={r.mentions.map((m) => m.category)}
+            disabled={busy}
+          />
           <button className="btn small" onClick={() => act('add', also)} disabled={!also || busy}>
             {mention ? 'Add' : 'File'}
           </button>
@@ -243,7 +262,7 @@ function SubreasonList({ bucket, query, options, onChanged }) {
  * The key: each bucket with its definition, mentions and the share of reviews that mention it; opening one shows
  * its sub-reasons. Below, the two groups that aren't mentions: Generic and No Comment.
  */
-function BucketKey({ buckets, groups, totals, onSaved, query, options, onChanged }) {
+function BucketKey({ buckets, groups, base, onSaved, query, options, onChanged }) {
   const [open, setOpen] = useState(null);
   const row = (b, value, share, body) => {
     const isOpen = open === b.key;
@@ -272,16 +291,16 @@ function BucketKey({ buckets, groups, totals, onSaved, query, options, onChanged
   return (
     <ul className="bucket-key">
       {buckets.map((b) =>
-        row(b, count(b.mentions, 'mention', 'mentions'), `${pct(b.mentions, totals.reviews)}% of reviews`, <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />),
+        row(b, count(b.mentions, 'mention', 'mentions'), `${pct(b.mentions, base.n)}% ${base.label}`, <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />),
       )}
       {groups.map((g) =>
         row(
           g,
           reviewsText(g.reviews),
-          `${pct(g.reviews, totals.reviews)}%`,
+          `${pct(g.reviews, base.n)}% ${base.label}`,
           g.key === 'generic' ? (
             <>
-              <p className="muted small">Reviews that say nothing specific. File one under a bucket if it does say what went wrong.</p>
+              <p className="muted small">Feedback that says nothing specific. File one under a bucket if it does say what went wrong.</p>
               <MentionList bucketKey="generic" query={query} options={options} onChanged={onChanged} />
             </>
           ) : (
@@ -298,7 +317,7 @@ function BucketKey({ buckets, groups, totals, onSaved, query, options, onChanged
  * wrong count (a bucket, not just Other), and only platform reasons that point to a bucket can agree or disagree.
  * A review agrees when any of its mentions is a bucket its platform reason points to.
  */
-function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
+function PlatformVsNotes({ rows, topReasons, buckets, totals, base }) {
   const name = Object.fromEntries(buckets.map((b) => [b.key, b.name]));
   const byReason = new Map();
   for (const r of rows) {
@@ -317,7 +336,7 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
   const noClaim = reasons.filter((r) => !r.expected.length).reduce((n, r) => n + r.reviews, 0);
   const topPlatform = topReasons[0];
   const topBucket = buckets.filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
-  if (!reasons.length) return <p className="muted">No reviews with a clear note this month.</p>;
+  if (!reasons.length) return <p className="muted">No feedback with a clear note this month.</p>;
 
   return (
     <>
@@ -337,7 +356,7 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
         {topPlatform && topBucket?.mentions > 0 && (
           <p className="variance-story">
             On the platform, the top reason is <strong>{topPlatform.reason || topPlatform.reason_code}</strong> ({pct(topPlatform.reviews, totals.reviews)}% of
-            reviews). In the buyers’ own words, it’s <strong>{topBucket.name}</strong> (mentioned in {pct(topBucket.mentions, totals.reviews)}% of reviews).
+            all feedback). In the buyers’ own words, it’s <strong>{topBucket.name}</strong> (mentioned in {pct(topBucket.mentions, base.n)}% {base.label}).
           </p>
         )}
       </div>
@@ -346,7 +365,7 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
           <thead>
             <tr>
               <th>Reason picked on the platform</th>
-              <th className="num">Reviews with a clear note</th>
+              <th className="num">Feedback with a clear note</th>
               <th className="num">Note agrees</th>
               <th>What the notes mention</th>
             </tr>
@@ -373,8 +392,8 @@ function PlatformVsNotes({ rows, topReasons, buckets, totals }) {
         </table>
       </div>
       <p className="muted small">
-        Counts reviews whose note says what went wrong (not only Other, Generic or No comment). A review agrees when any problem it mentions fits its
-        platform reason: “Defective item” fits connectivity or performance; “No longer needed” only Changed Mind. A review that mentions two buckets counts
+        Counts feedback whose note says what went wrong (not only Other, Generic or No comment). Feedback agrees when any problem it mentions fits its
+        platform reason: “Defective item” fits connectivity or performance; “No longer needed” only Changed Mind. Feedback that mentions two buckets counts
         in both on the right.
         {noClaim > 0 && ` ${reviewsText(noClaim)} had a platform reason that doesn’t point anywhere (“Not as described”, “No reason given”) and aren’t in the percentage.`}
       </p>
@@ -427,11 +446,12 @@ function NotesByBucket({ notes, buckets }) {
 }
 
 /** A product's row; opening it shows that camera's mentions and its buyers' notes for the month. */
-function ProductRow({ p, buckets, groups, productBuckets, query }) {
+function ProductRow({ p, buckets, groups, productBuckets, query, withBlank }) {
   const [open, setOpen] = useState(false);
   const notes = useLoad(open && p.product_id ? `/api/returns?${new URLSearchParams({ ...query, productId: p.product_id, noted: '1', limit: '1000' })}` : null);
   const mine = buckets.map((b) => ({ ...b, mentions: productBuckets.find((x) => x.product_id === p.product_id && x.bucket === b.key)?.mentions || 0 }));
   const top = [...mine].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
+  const feedback = withBlank ? p.reviews : p.noted_reviews;
   return (
     <>
       <tr className={`product-row ${open ? 'is-open' : ''}`}>
@@ -445,7 +465,7 @@ function ProductRow({ p, buckets, groups, productBuckets, query }) {
           )}
           {p.model && <div className="muted small product-model">{p.model}</div>}
         </td>
-        <td className="num">{p.reviews}</td>
+        <td className="num">{feedback}</td>
         <td className="num">{p.units}</td>
         <td className="num">
           {pct(p.noted_reviews, p.reviews)}% <span className="muted small">({p.noted_reviews})</span>
@@ -457,17 +477,17 @@ function ProductRow({ p, buckets, groups, productBuckets, query }) {
           <td colSpan={5}>
             <div className="product-detail-body">
               <div>
-                <h4>What its reviews mention</h4>
+                <h4>What its feedback mentions</h4>
                 {mine.some((b) => b.mentions) ? (
                   <HBars
                     ariaLabel={`${p.name} by bucket`}
-                    data={mine.filter((b) => b.mentions).map((b) => ({ label: b.name, value: b.mentions, share: pct(b.mentions, p.reviews), color: b.color }))}
+                    data={mine.filter((b) => b.mentions).map((b) => ({ label: b.name, value: b.mentions, share: pct(b.mentions, feedback), color: b.color }))}
                   />
                 ) : (
                   <p className="muted small">No notes that say why.</p>
                 )}
                 <p className="muted small">
-                  % of this product’s {reviewsText(p.reviews)}. <Link to={`/products/${p.product_id}`}>Open product</Link>
+                  % of this product’s {reviewsText(feedback)}{withBlank ? '' : ' with a comment'}. <Link to={`/products/${p.product_id}`}>Open product</Link>
                 </p>
               </div>
               <div>
@@ -546,7 +566,18 @@ function OtherSection({ query }) {
 
 export default function ReturnsOverview({ data, codebook, query, monthName, onCodebookChanged, onReturnsChanged }) {
   const [showTable, setShowTable] = useState(false);
+  const [params, setParams] = useSearchParams();
   const t = data.totals;
+  // Feedback with no comment is hidden unless asked for: percentages are then of feedback with a comment, which is
+  // what says why something came back. Shown, they're of all feedback.
+  const withBlank = params.get('blank') === '1';
+  const toggleBlank = () => {
+    const next = new URLSearchParams(params);
+    if (withBlank) next.delete('blank');
+    else next.set('blank', '1');
+    setParams(next, { replace: true });
+  };
+  const base = withBlank ? { n: t.reviews, label: 'of all feedback' } : { n: t.noted_reviews, label: 'of feedback with a comment' };
   const buckets = BUCKETS.map((b) => {
     const c = codebook.find((x) => x.key === b.key) || { name: b.key, description: '', subreasons: [] };
     const subs = data.bySubreason.filter((s) => s.bucket === b.key);
@@ -564,7 +595,7 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
     const c = codebook.find((x) => x.key === key) || { name: key, description: '' };
     return { key, color, group: true, name: c.name, description: c.description, reviews };
   };
-  const groups = [group('generic', GENERIC.color, t.generic_reviews), group('no_comment', '--series-blank', t.no_comment_reviews)];
+  const groups = [group('generic', GENERIC.color, t.generic_reviews), ...(withBlank ? [group('no_comment', '--series-blank', t.no_comment_reviews)] : [])];
   const options = codebook.filter((c) => c.in_share);
   const top = [...buckets].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
 
@@ -581,12 +612,22 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
 
   return (
     <>
+      <div className="row between counting-bar">
+        <p className="small counting-key" aria-label="How to read these numbers">
+          <strong>Feedback</strong> is one buyer’s return (an Amazon order counts once, however many units). <strong>Mentions</strong> are the
+          problems it raises: one piece of feedback can mention several, each in its bucket. <strong>Units</strong> are items sent back: one piece of
+          feedback can cover several, so units aren’t a count of problems.
+        </p>
+        <label className="inline small blank-toggle">
+          <input type="checkbox" checked={withBlank} onChange={toggleBlank} /> Include feedback with no comment ({t.blank_reviews})
+        </label>
+      </div>
       <section className="stats" aria-label="Summary">
         <div className="stat">
-          <span className="stat-label">Reviews</span>
-          <span className="stat-value">{t.reviews}</span>
+          <span className="stat-label">Feedback</span>
+          <span className="stat-value">{base.n}</span>
           <span className="stat-hint">
-            {monthName} · {count(t.units, 'unit', 'units')} returned
+            {withBlank ? monthName : `with a comment · ${t.blank_reviews} without, hidden`} · {count(t.units, 'unit', 'units')} returned in all
           </span>
         </div>
         <div className="stat">
@@ -606,7 +647,7 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
         <div className="stat">
           <span className="stat-label">Top bucket</span>
           <span className="stat-value stat-text">{top?.mentions ? top.name : '—'}</span>
-          <span className="stat-hint">{top?.mentions ? `mentioned in ${pct(top.mentions, t.reviews)}% of reviews` : ''}</span>
+          <span className="stat-hint">{top?.mentions ? `mentioned in ${pct(top.mentions, base.n)}% ${base.label}` : ''}</span>
         </div>
         <div className={`stat ${t.unmatched_units ? 'stat-overdue' : ''}`}>
           <span className="stat-label">Not matched to a product</span>
@@ -619,23 +660,23 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
         <div className="card">
           <h2>Why returns came back</h2>
           <Donut
-            ariaLabel="Mentions by bucket, with Generic and No comment reviews"
-            center={t.reviews}
-            centerLabel="reviews"
+            ariaLabel="Mentions by bucket, with Generic and No comment feedback"
+            center={base.n}
+            centerLabel="feedback"
             data={[
               ...buckets.map((b) => ({ key: b.key, label: b.name, value: b.mentions, color: b.color })),
               ...groups.map((g) => ({ key: g.key, label: g.name, value: g.reviews, color: g.color })),
             ]}
           />
           <p className="muted small">
-            Each problem a buyer mentions counts in its bucket, so a review that names two counts in both ({t.mentions} mentions from{' '}
-            {reviewsText(t.mentioning_reviews)}). Generic and No Comment count reviews.
+            Share of mentions: each problem a buyer raises counts in its bucket, so feedback that names two counts in both ({t.mentions} mentions from{' '}
+            {reviewsText(t.mentioning_reviews)}). Generic{withBlank ? ' and No Comment count' : ' counts'} whole feedback.
           </p>
         </div>
         <div className="card">
           <h2>Comment left vs blank</h2>
           <Donut
-            ariaLabel="Reviews with a comment and without"
+            ariaLabel="Feedback with a comment and without"
             center={`${pct(t.noted_reviews, t.reviews)}%`}
             centerLabel="left a comment"
             data={[
@@ -643,36 +684,36 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
               { key: 'blank', label: 'Left it blank', value: t.blank_reviews, color: '--series-blank' },
             ]}
           />
-          <p className="muted small">Reviews. Blank includes notes that only repeat the menu choice, “N/A” and the like.</p>
+          <p className="muted small">All feedback, whatever the toggle. Blank includes notes that only repeat the menu choice, “N/A” and the like.</p>
         </div>
       </section>
 
       <section className="card">
         <h2>The buckets and what they mean</h2>
         <p className="muted small">
-          How a review is counted: samples and returns that never reached a customer are set aside first. Then the buyer’s own words (not the reason they
+          How feedback is counted: samples and returns that never reached a customer are set aside first. Then the buyer’s own words (not the reason they
           picked on the platform; for an Amazon order, every unit’s comment) are matched against each bucket’s keywords, and every bucket the note mentions
           counts once. A change of mind counts only when nothing else is mentioned. A note that says nothing specific is Generic. Notes the rules can’t place
-          go to Other until someone files them. Open a bucket for its sub-reasons, and a sub-reason for every review behind it.
+          go to Other until someone files them. Open a bucket for its sub-reasons, and a sub-reason for every piece of feedback behind it.
         </p>
-        <BucketKey buckets={buckets} groups={groups} totals={t} onSaved={onCodebookChanged} query={query} options={options} onChanged={onReturnsChanged} />
+        <BucketKey buckets={buckets} groups={groups} base={base} onSaved={onCodebookChanged} query={query} options={options} onChanged={onReturnsChanged} />
       </section>
 
       <section className="card">
         <h2>Platform reason vs the buyer’s note</h2>
         <p className="muted small">How far the reason buyers pick on the platform can be trusted, judged against what their own note says.</p>
-        <PlatformVsNotes rows={data.reviewBuckets} topReasons={data.topReasons} buckets={buckets} totals={t} />
+        <PlatformVsNotes rows={data.reviewBuckets} topReasons={data.topReasons} buckets={buckets} totals={t} base={base} />
       </section>
 
       <section className="card flush">
         <h2 className="pad-h">By product</h2>
-        <p className="muted small pad-h">Open a camera to see what its reviews mention and what its buyers wrote this month.</p>
+        <p className="muted small pad-h">Open a camera to see what its feedback mentions and what its buyers wrote this month.</p>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Product</th>
-                <th className="num">Reviews</th>
+                <th className="num">{withBlank ? 'Feedback' : 'Feedback with a comment'}</th>
                 <th className="num">Units</th>
                 <th className="num">Left a comment</th>
                 <th>Top bucket</th>
@@ -680,7 +721,7 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
             </thead>
             <tbody>
               {data.byProduct.map((p) => (
-                <ProductRow key={p.product_id || 'unmatched'} p={p} buckets={buckets} groups={groups} productBuckets={data.productBuckets} query={query} />
+                <ProductRow key={p.product_id || 'unmatched'} p={p} buckets={buckets} groups={groups} productBuckets={data.productBuckets} query={query} withBlank={withBlank} />
               ))}
             </tbody>
           </table>

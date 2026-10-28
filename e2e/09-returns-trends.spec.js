@@ -31,7 +31,7 @@ test('Amazon vs TikTok puts the channels side by side', async ({ page }) => {
   await expect(page.getByLabel('Channel', { exact: true })).toHaveCount(0); // the view compares channels, so there's no channel filter
   const glance = page.getByRole('table', { name: 'Amazon and TikTok compared' });
   await expect(glance.locator('tr', { hasText: 'Units returned' })).toContainText('31'); // 3 Amazon, 1 TikTok
-  await expect(glance.locator('tr', { hasText: 'Reviews with no note' })).toContainText('100%0%');
+  await expect(glance.locator('tr', { hasText: 'Feedback with no note' })).toContainText('100%0%');
   await expect(page.getByRole('table', { name: 'Categories by channel' })).toContainText('Connectivity');
 });
 
