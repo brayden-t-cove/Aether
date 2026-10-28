@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CHANNELS, RETURN_FLAGS } from '../../shared/workflow.js';
 import { BUCKET_KEYS } from '../../shared/returnBuckets.js';
+import { lastAutoImports, runAutoImport } from '../lib/autoImports.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
@@ -59,7 +60,7 @@ const publicPlan = (plan) => ({
   })),
 });
 
-export function returnRoutes({ db, notify }) {
+export function returnRoutes({ db, notify, amazon = null }) {
   const router = Router();
 
   router.get(
@@ -154,6 +155,33 @@ export function returnRoutes({ db, notify }) {
         notify?.send(messages.returnsImported(notify, { count: result.record.created_count, units: result.plan.summary.units, channel: CHANNELS[channel], who: req.user.name || req.user.email }));
       }
       res.json({ dryRun: false, import: result.record, ...publicPlan(result.plan) });
+    }),
+  );
+
+  // Automatic imports from marketplace APIs: whether each is set up, and its latest runs.
+  router.get(
+    '/api/returns/auto-imports',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      res.json({ amazon: { configured: Boolean(amazon), ...(await lastAutoImports(db, 'amazon', 5)) } });
+    }),
+  );
+
+  // Import now, instead of waiting for the schedule. { from?, to? } (YYYY-MM-DD; default the last two weeks).
+  router.post(
+    '/api/returns/auto-imports/:channel',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      if (req.params.channel !== 'amazon') throw new HttpError(404, 'No automatic import for that channel yet');
+      if (!amazon) throw new HttpError(503, "Amazon isn't connected yet (AMAZON_SP_CLIENT_ID, _CLIENT_SECRET, _REFRESH_TOKEN)");
+      const from = DATE.test(req.body?.from ?? '') ? req.body.from : undefined;
+      const to = DATE.test(req.body?.to ?? '') ? req.body.to : undefined;
+      if (from && to && from > to) throw new HttpError(400, 'The start date is after the end date');
+      const run = await runAutoImport(db, { channel: 'amazon', client: amazon, from, to, trigger: 'manual', userId: req.user.id, notify });
+      if (run.skipped) throw new HttpError(409, 'An import is already running. Try again in a few minutes.');
+      if (run.ok === false) throw new HttpError(502, run.error);
+      const message = run.rows ? `${run.created} new of ${run.rows} rows from Amazon (${run.from} to ${run.to}); the rest were already imported.` : `No returns from Amazon for ${run.from} to ${run.to}.`;
+      res.json({ run, message });
     }),
   );
 

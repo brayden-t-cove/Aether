@@ -37,7 +37,7 @@ export default function IntegrationsPage() {
 
   if (error) return <div className="page"><ErrorNote error={error} /></div>;
   if (!data) return <div className="page"><p className="muted">Loading…</p></div>;
-  const { app, odyssey, asana, slack, uploads, database } = data;
+  const { app, odyssey, asana, amazon, slack, uploads, database } = data;
 
   return (
     <div className="page narrow-ish">
@@ -92,6 +92,52 @@ export default function IntegrationsPage() {
         ) : (
           <p className="muted small">
             Set <code>ODYSSEY_API_URL</code> and <code>ODYSSEY_API_KEY</code>. Odyssey needs a small change to accept the key; see <code>docs/ODYSSEY_API.md</code>.
+          </p>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="row between">
+          <h2>Amazon returns</h2>
+          <StatusBadge status={on(amazon.configured)} />
+        </div>
+        {amazon.configured ? (
+          <>
+            <p className="small">
+              Read-only. Imports the FBA customer returns report every {amazon.syncHours} hours, over the last two weeks, through the same import as an upload
+              (duplicates skipped). Marketplace {amazon.marketplaceId}.
+              {amazon.lastSuccessAt ? ` Last successful import ${formatDateTime(amazon.lastSuccessAt)}.` : ' No successful import yet.'}
+            </p>
+            <Action label="Import now" path="/api/returns/auto-imports/amazon" onDone={reload} />
+            {amazon.runs.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Started</th>
+                      <th>By</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {amazon.runs.map((r) => (
+                      <tr key={r.id}>
+                        <td className="small">{formatDateTime(r.started_at)}</td>
+                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">
+                          {r.ok === null ? 'Running…' : r.ok ? `${r.returns_created} new of ${r.rows_read} rows` : <span className="error-text">{r.error}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted small">
+            Set <code>AMAZON_SP_CLIENT_ID</code>, <code>AMAZON_SP_CLIENT_SECRET</code> and <code>AMAZON_SP_REFRESH_TOKEN</code> from a private app in
+            Seller Central (Apps and Services → Develop Apps) with the Amazon Fulfillment role. See docs/MARKETPLACE_APIS.md.
           </p>
         )}
       </section>

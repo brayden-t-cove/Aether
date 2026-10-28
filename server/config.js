@@ -49,6 +49,16 @@ export const config = {
     apiKey: process.env.ODYSSEY_API_KEY || '',
     syncMinutes: Number(process.env.ODYSSEY_SYNC_MINUTES) || 15,
   },
+  // Amazon Selling Partner API, read-only: the FBA customer returns report, imported automatically. From a private app
+  // self-authorized in Seller Central (Apps and Services → Develop Apps).
+  amazonSp: {
+    clientId: process.env.AMAZON_SP_CLIENT_ID || '',
+    clientSecret: process.env.AMAZON_SP_CLIENT_SECRET || '',
+    refreshToken: process.env.AMAZON_SP_REFRESH_TOKEN || '',
+    region: process.env.AMAZON_SP_REGION || 'na',
+    marketplaceId: process.env.AMAZON_SP_MARKETPLACE_ID || 'ATVPDKIKX0DER',
+    syncHours: Number(process.env.AMAZON_SP_SYNC_HOURS) || 12,
+  },
   // Asana, read-only: a personal access token, whose owner's view of Asana is what Aether can read.
   asana: {
     token: process.env.ASANA_TOKEN || '',
