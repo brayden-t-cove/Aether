@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../lib/auth.jsx';
-import { ROLES, ROLE_LABELS, TEAMS } from '../../../shared/roles.js';
+import { ROLES, ROLE_LABELS } from '../../../shared/roles.js';
+import TeamPicker from '../components/TeamPicker.jsx';
 
-const EMPTY_INVITE = { email: '', name: '', role: 'editor', team: '', password: '' };
+const EMPTY_INVITE = { email: '', name: '', role: 'editor', teams: [], password: '' };
 
 function InviteForm({ onInvited }) {
   const [form, setForm] = useState(EMPTY_INVITE);
@@ -16,7 +17,7 @@ function InviteForm({ onInvited }) {
     setSaving(true);
     setError('');
     try {
-      await api('/api/admin/users', { method: 'POST', body: { ...form, team: form.team || null } });
+      await api('/api/admin/users', { method: 'POST', body: form });
       setForm(EMPTY_INVITE);
       onInvited();
     } catch (err) {
@@ -53,22 +54,17 @@ function InviteForm({ onInvited }) {
           </select>
         </label>
         <label>
-          Team
-          <select value={form.team} onChange={set('team')}>
-            <option value="">—</option>
-            {Object.entries(TEAMS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
           <span>
             Password <span className="muted small">(optional)</span>
           </span>
           <input type="password" autoComplete="new-password" minLength={10} value={form.password} onChange={set('password')} />
         </label>
+      </div>
+      <div className="stack-tight">
+        <span className="field-label">
+          Teams <span className="muted small">(as many as they work in)</span>
+        </span>
+        <TeamPicker value={form.teams} onChange={(teams) => setForm((f) => ({ ...f, teams }))} label="Teams for the new user" />
       </div>
       <div>
         <button className="btn primary" disabled={saving}>
@@ -136,7 +132,7 @@ export default function UsersPage() {
                 <tr>
                   <th>User</th>
                   <th>Role</th>
-                  <th>Team</th>
+                  <th>Teams</th>
                   <th>Sign-in</th>
                   <th>Last login</th>
                   <th />
@@ -161,14 +157,7 @@ export default function UsersPage() {
                         </select>
                       </td>
                       <td>
-                        <select value={u.team || ''} onChange={(e) => patch(u.id, { team: e.target.value || null })}>
-                          <option value="">—</option>
-                          {Object.entries(TEAMS).map(([k, v]) => (
-                            <option key={k} value={k}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
+                        <TeamPicker value={u.teams} onChange={(teams) => patch(u.id, { teams })} label={`Teams of ${u.name || u.email}`} />
                       </td>
                       <td className="small">
                         {[u.googleLinked && 'Google', u.hasPassword && 'Password'].filter(Boolean).join(', ') || <span className="muted">Invited</span>}

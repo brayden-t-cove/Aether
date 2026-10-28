@@ -38,16 +38,26 @@ describe.skipIf(!TEST_DATABASE_URL)('user administration', () => {
     expect(body.activity[0]).toMatchObject({ action: 'invited', user_name: 'Admin' });
   });
 
+  it('puts a person on several teams', async () => {
+    const { body: created } = await admin.agent.post('/api/admin/users').send({ email: 'hats@lunahome.com', teams: ['leadership', 'product_development'] }).expect(201);
+    expect(created.user.teams).toEqual(['leadership', 'product_development']);
+    await admin.agent.patch(`/api/admin/users/${created.user.id}`).send({ teams: ['design', 'nope'] }).expect(400);
+    const { body } = await admin.agent.patch(`/api/admin/users/${created.user.id}`).send({ teams: ['ecommerce', 'leadership'] }).expect(200);
+    expect(body.user).toMatchObject({ team: 'ecommerce', teams: ['ecommerce', 'leadership'] });
+    const { body: list } = await admin.agent.get('/api/users').expect(200);
+    expect(list.users.find((u) => u.email === 'hats@lunahome.com').teams).toEqual(['ecommerce', 'leadership']);
+  });
+
   it('updates role and team, recording before and after', async () => {
     const { body: created } = await admin.agent.post('/api/admin/users').send({ email: 'des@lunahome.com' }).expect(201);
     const { body } = await admin.agent
       .patch(`/api/admin/users/${created.user.id}`)
       .send({ role: 'editor', team: 'design' })
       .expect(200);
-    expect(body.user).toMatchObject({ role: 'editor', team: 'design' });
+    expect(body.user).toMatchObject({ role: 'editor', team: 'design', teams: ['design'] });
 
     const { body: log } = await admin.agent.get(`/api/activity?entityType=user&entityId=${created.user.id}`);
-    expect(log.activity[0].changes).toEqual({ role: { from: 'viewer', to: 'editor' }, team: { from: null, to: 'design' } });
+    expect(log.activity[0].changes).toEqual({ role: { from: 'viewer', to: 'editor' }, teams: { from: [], to: ['design'] } });
   });
 
   it('stops admins from removing their own admin access', async () => {

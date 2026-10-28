@@ -43,6 +43,8 @@ test('an editor confirms a call the rules made', async ({ page }) => {
   await expect(subs.locator('.filed-return')).toContainText('Checked');
   await expect(subs.getByRole('button', { name: 'Looks right' })).toHaveCount(0);
   await expect(subs.getByLabel('Re-file as')).toBeVisible();
+  // A piece of feedback holds one mention per bucket: buckets it's already in are greyed out.
+  await expect(subs.getByLabel('Also mentions').locator('optgroup[label="Connectivity (already mentioned)"] option').first()).toBeDisabled();
   // The connectivity problem added on the Review page counts too.
   await expect(page.getByRole('button', { name: /^Connectivity/ })).toContainText('1 mention');
 });

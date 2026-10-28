@@ -24,6 +24,7 @@ import { createFileStore } from './lib/files.js';
 import { createOdysseyClient } from './lib/odyssey.js';
 import { createAsanaClient } from './lib/asana.js';
 import { asanaRoutes } from './routes/asana.js';
+import { myWorkRoutes } from './routes/myWork.js';
 import { vendorRoutes } from './routes/vendors.js';
 import { odysseyRoutes } from './routes/odyssey.js';
 import { testReportRoutes } from './routes/testReports.js';
@@ -105,6 +106,7 @@ export function createApp({ db, config, odyssey = createOdysseyClient(config.ody
   app.use(odysseyRoutes({ db, odyssey }));
   app.use(testReportRoutes({ db, files }));
   app.use(asanaRoutes({ db, asana }));
+  app.use(myWorkRoutes({ db }));
   app.use(listingRoutes({ db }));
   app.use(returnRoutes({ db, notify }));
   app.use(comparisonRoutes({ db }));

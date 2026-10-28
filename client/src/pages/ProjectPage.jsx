@@ -13,6 +13,7 @@ import ProgressMeter from '../components/ProgressMeter.jsx';
 import StateBadge from '../components/StateBadge.jsx';
 import TestResults from '../components/TestResults.jsx';
 import { AsanaProjectLink, AsanaTasks } from '../components/Asana.jsx';
+import ProjectPeople from '../components/ProjectPeople.jsx';
 
 /**
  * Group by stage, in the order stages first appear, when items have stages
@@ -309,6 +310,8 @@ export default function ProjectPage() {
       )}
 
       {project.description && !editing && <p className="pre">{project.description}</p>}
+
+      <ProjectPeople projectId={project.id} members={data.members || []} users={users.data?.users || []} editable={editable} onChange={reload} />
 
       <section className="card flush checklist">
         <div className="checklist-head">

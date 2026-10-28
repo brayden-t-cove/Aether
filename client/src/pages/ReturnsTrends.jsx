@@ -132,7 +132,7 @@ export function WeekOverWeek({ data }) {
           </div>
         )}
         <p className="muted small">
-          Mentions: a review that names two problems counts in both buckets. ▲ marks a rise of at least 3 and 50%. Reviews with no note or a Generic one aren't in this table; see Blank notes.{' '}
+          Mentions: feedback that names two problems counts in both buckets. ▲ marks a rise of at least 3 and 50%. Feedback with no note or a Generic one isn't in this table; see Blank notes.{' '}
           <button className="link-btn" onClick={() => setShowAll((s) => !s)} aria-pressed={showAll}>
             {showAll ? 'Hide earlier weeks' : `Show all ${data.weeks.length} weeks`}
           </button>
@@ -162,8 +162,8 @@ export function ChannelsView({ data }) {
   const products = productBreakdown(data.rows.filter((r) => r.channel === 'amazon' || r.channel === 'tiktok'));
   const rows = [
     ['Units returned', (f) => f.units],
-    ['Reviews', (f) => f.returns],
-    ['Reviews with no note', (f) => `${pct(f.blank, f.returns)}%`],
+    ['Feedback', (f) => f.returns],
+    ['Feedback with no note', (f) => `${pct(f.blank, f.returns)}%`],
   ];
 
   return (
@@ -171,7 +171,7 @@ export function ChannelsView({ data }) {
       <section className="card flush">
         <h2 className="pad-h">Amazon vs TikTok</h2>
         <p className="muted small pad-h">
-          {weekLabel(data.weeks[0])} to {weekLabel(data.weeks.at(-1))}. Reviews with no note is a share of reviews; buckets count mentions.
+          {weekLabel(data.weeks[0])} to {weekLabel(data.weeks.at(-1))}. Feedback with no note is a share of all feedback; buckets count mentions, as a share of feedback with a comment.
         </p>
         <div className="table-wrap">
           <table aria-label="Amazon and TikTok compared">
@@ -227,10 +227,10 @@ export function ChannelsView({ data }) {
                     <tr key={c.key}>
                       <td>{c.label}</td>
                       <td className="num">
-                        {c.amazon} <span className="muted small">({pct(c.amazon, amazon.returns)}% of reviews)</span>
+                        {c.amazon} <span className="muted small">({pct(c.amazon, amazon.returns - amazon.blank)}%)</span>
                       </td>
                       <td className="num">
-                        {c.tiktok} <span className="muted small">({pct(c.tiktok, tiktok.returns)}% of reviews)</span>
+                        {c.tiktok} <span className="muted small">({pct(c.tiktok, tiktok.returns - tiktok.blank)}%)</span>
                       </td>
                     </tr>
                   ))}

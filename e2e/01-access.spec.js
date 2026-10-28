@@ -30,12 +30,15 @@ test('admin invites a teammate and changes their team', async ({ page }) => {
   await nav(page, 'Users');
   await field(page, 'Email').fill('dana@e2e.test');
   await field(page, 'Name').fill('Dana Design');
-  await field(page, 'Team', 'select').selectOption('design');
+  await page.getByRole('group', { name: 'Teams for the new user' }).getByRole('button', { name: 'Design' }).click();
   await page.getByRole('button', { name: 'Invite' }).click();
   const row = page.locator('tr', { hasText: 'dana@e2e.test' });
   await expect(row).toContainText('Invited');
-  await row.locator('select').nth(1).selectOption('product_development');
-  await expect(row.locator('select').nth(1)).toHaveValue('product_development');
+  // People wear several hats: add a second team.
+  const teams = row.getByRole('group', { name: 'Teams of Dana Design' });
+  await expect(teams.getByRole('button', { name: 'Design' })).toHaveAttribute('aria-pressed', 'true');
+  await teams.getByRole('button', { name: 'Product Development' }).click();
+  await expect(teams.getByRole('button', { name: 'Product Development' })).toHaveAttribute('aria-pressed', 'true');
   await nav(page, 'Dashboard');
   await expect(page.getByText('Alex Admin invited dana@e2e.test as editor')).toBeVisible();
 });
