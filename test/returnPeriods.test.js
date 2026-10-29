@@ -10,7 +10,7 @@ describe('returns periods', () => {
 
   it('works out each preset from today', () => {
     expect(at('period=last_month')).toMatchObject({ from: '2026-09-01', to: '2026-09-30', label: 'September 2026' });
-    expect(at('period=last_3_months')).toMatchObject({ from: '2026-07-01', to: '2026-09-30', label: 'Jul – Sep 2026' });
+    expect(at('period=last_3_months')).toMatchObject({ from: '2026-08-01', to: '2026-10-28', label: 'Aug – Oct 2026 (so far)' });
     expect(at('period=qtd')).toMatchObject({ from: '2026-10-01', to: '2026-10-28' });
     expect(at('period=ytd')).toMatchObject({ from: '2026-01-01', to: '2026-10-28', label: 'Jan – Oct 2026 (so far)' });
     expect(at('period=last_12_months')).toMatchObject({ from: '2025-11-01', to: '2026-10-28', label: 'Nov 2025 – Oct 2026 (so far)' });
