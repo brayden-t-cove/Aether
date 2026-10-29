@@ -8,6 +8,13 @@ matched by listing, and buyers' notes sorted into mentions. New returns count st
 Status and recent runs: **Returns → Import returns** (Automatic imports) and **Admin → Integrations**. Both Amazon and
 TikTok are built; each turns on when its keys are set.
 
+**Past returns.** The regular runs cover the last 14 days. After a channel's first successful run, Aether also brings in
+its past two years, one month per request (Amazon builds a report for each, about a minute apiece, so two years takes
+roughly half an hour). It runs in the background, shows how far it has got on **Import returns**, and picks up where it
+left off if the server restarts. Anyone with edit access can run it again from an earlier date (**Bring in past
+returns**). Returns already uploaded or imported are skipped, so it is safe to run over months that have uploads. How
+far back a marketplace still has data is up to the marketplace: months it no longer keeps come back empty.
+
 ## Amazon (Selling Partner API)
 
 What Aether reads: the **FBA customer returns report** (`GET_FBA_FULFILLMENT_CUSTOMER_RETURNS_DATA`), the same file as

@@ -8,7 +8,7 @@ import { createAsanaClient } from './lib/asana.js';
 import { pullAsanaComments } from './lib/asanaSync.js';
 import { createAmazonSpClient } from './lib/amazonSp.js';
 import { createTiktokShopClient, tokenStore } from './lib/tiktokShop.js';
-import { runAutoImport } from './lib/autoImports.js';
+import { runAutoImport, startHistoryImport } from './lib/autoImports.js';
 import { runOdysseySync } from './lib/sync.js';
 import { startScheduler } from './lib/scheduler.js';
 import { createNotifier, messages } from './lib/notify.js';
@@ -80,6 +80,8 @@ const stopJobs = startScheduler([
     run: async () => {
       const run = await runAutoImport(db, { channel: 'amazon', client: amazon, notify });
       if (run.ok === false) console.error(`[jobs] Amazon returns import: ${run.error}`);
+      // Once connected, the past two years come in too (and a history import a restart cut off picks up again).
+      else await startHistoryImport(db, { channel: 'amazon', client: amazon, notify, when: 'first' });
     },
   },
   {
@@ -91,6 +93,7 @@ const stopJobs = startScheduler([
       if (!(await tiktok.status()).authorized) return;
       const run = await runAutoImport(db, { channel: 'tiktok', client: tiktok, notify });
       if (run.ok === false) console.error(`[jobs] TikTok returns import: ${run.error}`);
+      else await startHistoryImport(db, { channel: 'tiktok', client: tiktok, notify, when: 'first' });
     },
   },
   {
