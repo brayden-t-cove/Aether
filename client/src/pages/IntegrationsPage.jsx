@@ -74,7 +74,7 @@ export default function IntegrationsPage() {
                     {odyssey.runs.map((r) => (
                       <tr key={r.id}>
                         <td className="small">{formatDateTime(r.started_at)}</td>
-                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">{r.started_by_name || (r.trigger === 'history' ? 'Past returns' : 'Schedule')}</td>
                         <td className="small">
                           {r.ok === false ? (
                             <span className="error-text">{r.error}</span>
@@ -125,7 +125,7 @@ export default function IntegrationsPage() {
                     {amazon.runs.map((r) => (
                       <tr key={r.id}>
                         <td className="small">{formatDateTime(r.started_at)}</td>
-                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">{r.started_by_name || (r.trigger === 'history' ? 'Past returns' : 'Schedule')}</td>
                         <td className="small">
                           {r.ok === null ? 'Running…' : r.ok ? `${r.returns_created} new of ${r.rows_read} rows` : <span className="error-text">{r.error}</span>}
                         </td>
@@ -188,7 +188,7 @@ export default function IntegrationsPage() {
                     {tiktok.runs.map((r) => (
                       <tr key={r.id}>
                         <td className="small">{formatDateTime(r.started_at)}</td>
-                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">{r.started_by_name || (r.trigger === 'history' ? 'Past returns' : 'Schedule')}</td>
                         <td className="small">
                           {r.ok === null ? 'Running…' : r.ok ? `${r.returns_created} new of ${r.rows_read} rows` : <span className="error-text">{r.error}</span>}
                           {r.detail && <div className="muted">{r.detail}</div>}
@@ -230,7 +230,7 @@ export default function IntegrationsPage() {
                     {asana.runs.map((r) => (
                       <tr key={r.id}>
                         <td className="small">{formatDateTime(r.started_at)}</td>
-                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">{r.started_by_name || (r.trigger === 'history' ? 'Past returns' : 'Schedule')}</td>
                         <td className="small">
                           {r.ok === null ? 'Running…' : `${r.comments_synced} new comment${r.comments_synced === 1 ? '' : 's'}`}
                           {r.error && <div className="error-text">{r.error}</div>}

@@ -61,7 +61,7 @@ export async function runAutoImport(pool, { channel, client, from, to, trigger =
       'UPDATE sync_runs SET finished_at = now(), ok = true, rows_read = $2, returns_created = $3, import_id = $4, detail = $5 WHERE id = $1 RETURNING *',
       [runId, rows.length, created, record?.id ?? null, detail],
     );
-    return { ...done[0], from, to, created, rows: rows.length };
+    return { ...done[0], from, to, created, units: created ? units : 0, rows: rows.length };
   } catch (err) {
     if (runId) await pool.query('UPDATE sync_runs SET finished_at = now(), ok = false, error = $2 WHERE id = $1', [runId, String(err.message).slice(0, 500)]);
     return { ok: false, error: err.message };
@@ -69,6 +69,115 @@ export async function runAutoImport(pool, { channel, client, from, to, trigger =
     await lockClient.query('SELECT pg_advisory_unlock($1)', [src.lock]).catch(() => {});
     lockClient.release();
   }
+}
+
+// History: how far back the first connection reaches, in month-sized requests (one report per month keeps each within
+// the marketplaces' range limits). A run that stops updating for this long was cut off (a restart) and picks up again.
+export const HISTORY_MONTHS = 24;
+const STALE_MS = 15 * 60_000;
+const historyKey = (channel) => `${AUTO_SOURCES[channel].source}_history`;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Month-sized windows covering from..to, oldest first: the first and last cut to the range. */
+export function monthWindows(from, to) {
+  const out = [];
+  let start = from;
+  while (start <= to) {
+    const d = new Date(`${start.slice(0, 7)}-01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    const next = d.toISOString().slice(0, 10);
+    const end = addDays(next, -1);
+    out.push({ from: start, to: end < to ? end : to });
+    start = next;
+  }
+  return out;
+}
+
+/** Where a channel's history import stands: null (never run), or { status, from, to, through, created, error, … }. */
+export async function historyState(db, channel) {
+  const { rows } = await db.query('SELECT value, updated_at FROM job_state WHERE key = $1', [historyKey(channel)]);
+  if (!rows[0]) return null;
+  let state;
+  try {
+    state = JSON.parse(rows[0].value);
+  } catch {
+    return null;
+  }
+  // Still marked running but not touched in a while: the server restarted part way through.
+  if (state.status === 'running' && Date.now() - new Date(rows[0].updated_at).getTime() > STALE_MS) state.status = 'interrupted';
+  return state;
+}
+
+async function saveHistory(db, channel, state) {
+  await db.query(
+    `INSERT INTO job_state (key, value, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [historyKey(channel), JSON.stringify(state)],
+  );
+}
+
+/**
+ * Bring in a channel's past returns, one month at a time from `from` (default HISTORY_MONTHS back) to today, through
+ * the same import as every run, so returns already uploaded or imported are skipped. Takes a while (Amazon builds a
+ * report per month), so callers don't wait on it. Resumes after `resume.through` when picking up a cut-off run.
+ * Posts one Slack message at the end, not one per month.
+ */
+export async function runHistoryImport(pool, { channel, client, from, userId = null, notify = null, resume = null, retryMs = 60_000 }) {
+  const { rows } = await pool.query(`SELECT (now() AT TIME ZONE '${RETURNS_TZ}')::date::text AS today`);
+  const to = rows[0].today;
+  if (!from) {
+    const d = new Date(`${to.slice(0, 7)}-01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - (HISTORY_MONTHS - 1));
+    from = d.toISOString().slice(0, 10);
+  }
+  const state = resume
+    ? { ...resume, status: 'running', error: null }
+    : { status: 'running', from, to, through: null, created: 0, units: 0, error: null, started_at: new Date().toISOString(), started_by: userId };
+  await saveHistory(pool, channel, state);
+  const windows = monthWindows(state.from, state.to).filter((w) => !state.through || w.from > state.through);
+  for (const w of windows) {
+    let run;
+    // A scheduled run holding the channel's lock: wait for it rather than skip the month.
+    for (let tries = 0; tries < 10; tries++) {
+      run = await runAutoImport(pool, { channel, client, from: w.from, to: w.to, trigger: 'history', userId });
+      if (!run.skipped) break;
+      await sleep(retryMs);
+    }
+    if (run.skipped || run.ok === false) {
+      Object.assign(state, { status: 'failed', error: run.error || 'Another import kept running', finished_at: new Date().toISOString() });
+      await saveHistory(pool, channel, state);
+      return state;
+    }
+    state.created += run.created;
+    state.units = (state.units ?? 0) + run.units;
+    state.through = w.to;
+    await saveHistory(pool, channel, state);
+  }
+  Object.assign(state, { status: 'done', finished_at: new Date().toISOString() });
+  await saveHistory(pool, channel, state);
+  if (state.created) {
+    notify?.send(messages.returnsImported(notify, { count: state.created, units: state.units, channel: `${AUTO_SOURCES[channel].label} (history since ${state.from})`, who: 'Automatic import' }));
+  }
+  return state;
+}
+
+const running = new Set();
+
+/**
+ * Start a channel's history import in the background unless one is already going. `when`: 'always' (someone asked),
+ * or 'first' (only if it has never run, or to pick up one a restart cut off). → { started, state }.
+ */
+export async function startHistoryImport(pool, { channel, client, from, userId = null, notify = null, when = 'always', log = console }) {
+  const state = await historyState(pool, channel);
+  if (running.has(channel) || state?.status === 'running') return { started: false, reason: 'running', state };
+  const resume = state?.status === 'interrupted' ? state : null;
+  if (when === 'first' && state && !resume) return { started: false, reason: 'done', state };
+  running.add(channel);
+  runHistoryImport(pool, { channel, client, from, userId, notify, resume: when === 'first' ? resume : null })
+    .then((s) => s.status === 'failed' && log.error(`[jobs] ${channel} returns history: ${s.error}`))
+    .catch((err) => log.error(`[jobs] ${channel} returns history failed:`, err.message))
+    .finally(() => running.delete(channel));
+  return { started: true };
 }
 
 /** A channel's latest runs, newest first, and when one last succeeded. */

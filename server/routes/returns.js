@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CHANNELS, RETURN_FLAGS } from '../../shared/workflow.js';
 import { BUCKET_KEYS } from '../../shared/returnBuckets.js';
-import { lastAutoImports, runAutoImport } from '../lib/autoImports.js';
+import { historyState, lastAutoImports, runAutoImport, startHistoryImport } from '../lib/autoImports.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
@@ -168,14 +168,16 @@ export function returnRoutes({ db, notify, amazon = null, tiktok = null }) {
     '/api/returns/auto-imports',
     requireAuth,
     asyncHandler(async (req, res) => {
-      const [amazonRuns, tiktokRuns, tiktokStatus] = await Promise.all([
+      const [amazonRuns, tiktokRuns, tiktokStatus, amazonHistory, tiktokHistory] = await Promise.all([
         lastAutoImports(db, 'amazon', 5),
         lastAutoImports(db, 'tiktok', 5),
         tiktok ? tiktok.status() : null,
+        historyState(db, 'amazon'),
+        historyState(db, 'tiktok'),
       ]);
       res.json({
-        amazon: { configured: Boolean(amazon), ...amazonRuns },
-        tiktok: { configured: Boolean(tiktok), authorized: Boolean(tiktokStatus?.authorized), shop: tiktokStatus?.shop ?? null, ...tiktokRuns },
+        amazon: { configured: Boolean(amazon), history: amazonHistory, ...amazonRuns },
+        tiktok: { configured: Boolean(tiktok), authorized: Boolean(tiktokStatus?.authorized), shop: tiktokStatus?.shop ?? null, history: tiktokHistory, ...tiktokRuns },
       });
     }),
   );
@@ -199,6 +201,24 @@ export function returnRoutes({ db, notify, amazon = null, tiktok = null }) {
       const name = CHANNELS[channel];
       const message = run.rows ? `${run.created} new of ${run.rows} rows from ${name} (${run.from} to ${run.to}); the rest were already imported.` : `No returns from ${name} for ${run.from} to ${run.to}.`;
       res.json({ run, message });
+    }),
+  );
+
+  // Bring in past returns, a month at a time from { from? } (default two years back) to today. Runs in the background;
+  // its progress shows on the auto-imports status above.
+  router.post(
+    '/api/returns/auto-imports/:channel/history',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const channel = req.params.channel;
+      if (!Object.hasOwn(autoClients, channel)) throw new HttpError(404, 'No automatic import for that channel');
+      const client = autoClients[channel];
+      if (!client) return res.status(503).json({ error: NOT_SET_UP[channel] });
+      if (channel === 'tiktok' && !(await client.status()).authorized) return res.status(503).json({ error: "TikTok isn't authorized for the shop yet" });
+      const from = DATE.test(req.body?.from ?? '') ? req.body.from : undefined;
+      const started = await startHistoryImport(db, { channel, client, from, userId: req.user.id, notify });
+      if (!started.started) throw new HttpError(409, 'Past returns are already being brought in.');
+      res.status(202).json({ message: `Bringing in past ${CHANNELS[channel]} returns, a month at a time. This page shows how far it has got.` });
     }),
   );
 
