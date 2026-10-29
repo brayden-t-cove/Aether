@@ -6,6 +6,9 @@ import { bootstrapAdmin, MIN_PASSWORD_LENGTH } from './lib/users.js';
 import { createOdysseyClient } from './lib/odyssey.js';
 import { createAsanaClient } from './lib/asana.js';
 import { pullAsanaComments } from './lib/asanaSync.js';
+import { createAmazonSpClient } from './lib/amazonSp.js';
+import { createTiktokShopClient, tokenStore } from './lib/tiktokShop.js';
+import { runAutoImport } from './lib/autoImports.js';
 import { runOdysseySync } from './lib/sync.js';
 import { startScheduler } from './lib/scheduler.js';
 import { createNotifier, messages } from './lib/notify.js';
@@ -40,8 +43,10 @@ if (config.adminPassword) {
 
 const odyssey = createOdysseyClient(config.odyssey);
 const asana = createAsanaClient(config.asana);
+const amazon = createAmazonSpClient(config.amazonSp);
+const tiktok = createTiktokShopClient({ ...config.tiktokShop, store: tokenStore(db) });
 const notify = createNotifier(config);
-const app = createApp({ db, config, odyssey, asana, notify });
+const app = createApp({ db, config, odyssey, asana, amazon, tiktok, notify });
 
 // Tell Slack when Odyssey sync starts failing, once, not on every attempt.
 let lastSyncOk = true;
@@ -69,6 +74,26 @@ const stopJobs = startScheduler([
     },
   },
   {
+    name: 'amazon-returns',
+    everyMs: amazon ? config.amazonSp.syncHours * 3_600_000 : 0,
+    firstRunMs: 5 * 60_000,
+    run: async () => {
+      const run = await runAutoImport(db, { channel: 'amazon', client: amazon, notify });
+      if (run.ok === false) console.error(`[jobs] Amazon returns import: ${run.error}`);
+    },
+  },
+  {
+    name: 'tiktok-returns',
+    everyMs: tiktok ? config.tiktokShop.syncHours * 3_600_000 : 0,
+    firstRunMs: 6 * 60_000,
+    run: async () => {
+      // Nothing to do until someone has authorized the shop.
+      if (!(await tiktok.status()).authorized) return;
+      const run = await runAutoImport(db, { channel: 'tiktok', client: tiktok, notify });
+      if (run.ok === false) console.error(`[jobs] TikTok returns import: ${run.error}`);
+    },
+  },
+  {
     name: 'slack-digest',
     everyMs: notify.enabled ? 10 * 60_000 : 0,
     firstRunMs: 60_000,
@@ -80,6 +105,8 @@ const server = app.listen(config.port, () => {
   console.log(`[aether] Google sign-in ${config.google.enabled ? 'enabled' : 'disabled'}`);
   console.log(`[aether] Odyssey sync ${odyssey ? `every ${config.odyssey.syncMinutes} min from ${odyssey.url}` : 'not configured'}`);
   console.log(`[aether] Asana ${asana ? `comments pulled every ${config.asana.syncMinutes} min` : 'not configured'}`);
+  console.log(`[aether] TikTok returns ${tiktok ? `imported every ${config.tiktokShop.syncHours} h once the shop is authorized` : 'not configured'}`);
+  console.log(`[aether] Amazon returns ${amazon ? `imported every ${config.amazonSp.syncHours} h` : 'not configured'}`);
   console.log(`[aether] file uploads ${config.filesDir ? `to ${config.filesDir}` : 'off (links only)'}`);
   console.log(`[aether] Slack ${notify.enabled ? `on, daily digest after ${config.slack.digestHourUtc}:00 UTC` : 'not configured'} · environment: ${config.appEnv}`);
 });

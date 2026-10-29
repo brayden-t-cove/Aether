@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CHANNELS, RETURN_FLAGS } from '../../shared/workflow.js';
 import { BUCKET_KEYS } from '../../shared/returnBuckets.js';
+import { lastAutoImports, runAutoImport } from '../lib/autoImports.js';
 import { asyncHandler, HttpError } from '../lib/http.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { logActivity } from '../lib/activity.js';
@@ -32,6 +33,11 @@ function readFilters(q) {
     to: DATE.test(q.to ?? '') ? q.to : undefined,
     channel: Object.hasOwn(CHANNELS, q.channel ?? '') ? q.channel : undefined,
     productId: isUuid(q.productId) ? q.productId : undefined,
+    // ?products=<id>,<id>: several products at once.
+    productIds: String(q.products ?? '')
+      .split(',')
+      .filter(isUuid)
+      .slice(0, 100),
     marketId: isUuid(q.marketId) ? q.marketId : undefined,
     flag: Object.hasOwn(RETURN_FLAGS, q.flag ?? '') ? q.flag : undefined,
     blank: q.blank === '1',
@@ -54,7 +60,7 @@ const publicPlan = (plan) => ({
   })),
 });
 
-export function returnRoutes({ db, notify }) {
+export function returnRoutes({ db, notify, amazon = null, tiktok = null }) {
   const router = Router();
 
   router.get(
@@ -149,6 +155,69 @@ export function returnRoutes({ db, notify }) {
         notify?.send(messages.returnsImported(notify, { count: result.record.created_count, units: result.plan.summary.units, channel: CHANNELS[channel], who: req.user.name || req.user.email }));
       }
       res.json({ dryRun: false, import: result.record, ...publicPlan(result.plan) });
+    }),
+  );
+
+  // Automatic imports from marketplace APIs: whether each is set up, and its latest runs.
+  const autoClients = { amazon, tiktok };
+  const NOT_SET_UP = {
+    amazon: "Amazon isn't connected yet (AMAZON_SP_CLIENT_ID, _CLIENT_SECRET, _REFRESH_TOKEN)",
+    tiktok: "TikTok isn't connected yet (TIKTOK_APP_KEY, TIKTOK_APP_SECRET)",
+  };
+  router.get(
+    '/api/returns/auto-imports',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const [amazonRuns, tiktokRuns, tiktokStatus] = await Promise.all([
+        lastAutoImports(db, 'amazon', 5),
+        lastAutoImports(db, 'tiktok', 5),
+        tiktok ? tiktok.status() : null,
+      ]);
+      res.json({
+        amazon: { configured: Boolean(amazon), ...amazonRuns },
+        tiktok: { configured: Boolean(tiktok), authorized: Boolean(tiktokStatus?.authorized), shop: tiktokStatus?.shop ?? null, ...tiktokRuns },
+      });
+    }),
+  );
+
+  // Import now, instead of waiting for the schedule. { from?, to? } (YYYY-MM-DD; default the last two weeks).
+  router.post(
+    '/api/returns/auto-imports/:channel',
+    requireRole('editor'),
+    asyncHandler(async (req, res) => {
+      const channel = req.params.channel;
+      if (!Object.hasOwn(autoClients, channel)) throw new HttpError(404, 'No automatic import for that channel');
+      const client = autoClients[channel];
+      // Integration problems are answered with their message (the error handler hides 5xx messages).
+      if (!client) return res.status(503).json({ error: NOT_SET_UP[channel] });
+      const from = DATE.test(req.body?.from ?? '') ? req.body.from : undefined;
+      const to = DATE.test(req.body?.to ?? '') ? req.body.to : undefined;
+      if (from && to && from > to) throw new HttpError(400, 'The start date is after the end date');
+      const run = await runAutoImport(db, { channel, client, from, to, trigger: 'manual', userId: req.user.id, notify });
+      if (run.skipped) throw new HttpError(409, 'An import is already running. Try again in a few minutes.');
+      if (run.ok === false) return res.status(502).json({ error: run.error, run });
+      const name = CHANNELS[channel];
+      const message = run.rows ? `${run.created} new of ${run.rows} rows from ${name} (${run.from} to ${run.to}); the rest were already imported.` : `No returns from ${name} for ${run.from} to ${run.to}.`;
+      res.json({ run, message });
+    }),
+  );
+
+  // TikTok sends an admin back here after they authorize the shop for Aether's app (the app's redirect URL in Partner
+  // Center is <PUBLIC_URL>/api/integrations/tiktok/callback). The code is swapped for tokens, which Aether keeps.
+  router.get(
+    '/api/integrations/tiktok/callback',
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      if (!tiktok) return res.status(503).json({ error: NOT_SET_UP.tiktok });
+      const code = typeof req.query.code === 'string' ? req.query.code : '';
+      if (!code) throw new HttpError(400, 'TikTok sent no authorization code');
+      try {
+        await tiktok.authorize(code);
+      } catch (err) {
+        return res.redirect(`/admin/integrations?tiktok=${encodeURIComponent(err.message)}`);
+      }
+      await logActivity(db, { entityType: 'returns', entityId: 'tiktok', action: 'tiktok_authorized', changes: { label: 'TikTok Shop' }, userId: req.user.id });
+      res.redirect('/admin/integrations?tiktok=connected');
     }),
   );
 

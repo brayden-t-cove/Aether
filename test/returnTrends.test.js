@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { change, channelFigures, lastTwoComplete, productBreakdown, weeklyGroups, weekLabel, weekTotals } from '../client/src/lib/returnTrends.js';
+import { change, channelFigures, isoWeek, lastTwoComplete, productBreakdown, weeklyGroups, weekLabel, weekTotals } from '../client/src/lib/returnTrends.js';
 import { makeApp, setupDb, signedInAgent, TEST_DATABASE_URL } from './helpers.js';
 
 const WEEKS = [
@@ -68,8 +68,8 @@ describe('adding up weekly returns', () => {
   });
 
   it('labels weeks', () => {
-    expect(weekLabel(WEEKS[1])).toBe('Sep 21–27');
-    expect(weekLabel(WEEKS[2])).toBe('Sep 28 – Oct 4');
+    expect(weekLabel(WEEKS[1])).toBe('Wk 39 · Sep 21–27');
+    expect(weekLabel(WEEKS[2])).toBe('Wk 40 · Sep 28 – Oct 4');
   });
 });
 
@@ -148,5 +148,16 @@ describe.skipIf(!TEST_DATABASE_URL)('the weekly returns API', () => {
     const { body } = await viewer.get('/api/returns?blank=1').expect(200);
     expect(body.returns.map((r) => r.return_ref)).toEqual(['430000000000000003']);
     await viewer.get('/api/returns/weekly?weeks=nonsense&end=garbage').expect(200);
+  });
+});
+
+describe('ISO week numbers', () => {
+  it('numbers Monday-to-Sunday weeks, week 1 holding the year’s first Thursday', () => {
+    expect(isoWeek('2026-10-05')).toBe(41);
+    expect(isoWeek('2026-10-11')).toBe(41);
+    expect(isoWeek('2026-10-12')).toBe(42);
+    expect(isoWeek('2025-12-29')).toBe(1); // belongs to 2026's week 1
+    expect(isoWeek('2027-01-01')).toBe(53); // 2026 has 53 weeks
+    expect(isoWeek('2021-01-03')).toBe(53); // a Sunday at the end of 2020's week 53
   });
 });

@@ -15,6 +15,8 @@ export const testConfig = {
   google: { enabled: false },
   odyssey: {},
   asana: {},
+  amazonSp: {},
+  tiktokShop: {},
   slack: { webhookUrl: '', digestHourUtc: 14 },
   maxUploadMb: 25,
 };
@@ -33,6 +35,8 @@ export function makeApp(db, overrides = {}) {
     ...overrides,
     odyssey: { ...testConfig.odyssey, ...overrides.odyssey },
     asana: { ...testConfig.asana, ...overrides.asana },
+    amazonSp: { ...testConfig.amazonSp, ...overrides.amazonSp },
+    tiktokShop: { ...testConfig.tiktokShop, ...overrides.tiktokShop },
     slack: { ...testConfig.slack, ...overrides.slack },
   };
   return createApp({ db, config });

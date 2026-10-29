@@ -8,6 +8,7 @@ import { formatDateTime } from '../lib/format.js';
 import { parseTable, readText } from '../lib/table.js';
 import ErrorNote from '../components/ErrorNote.jsx';
 import { MarketSelect } from '../components/Pickers.jsx';
+import AutoImports from '../components/AutoImports.jsx';
 
 const HOW_TO = {
   amazon: 'In Seller Central: Reports → Fulfillment → Customer Returns (FBA). Download as .txt or .csv and upload it here.',
@@ -85,6 +86,8 @@ export default function ReturnsImportPage() {
         <h1>Import returns</h1>
         <p className="muted">Upload a returns report. You'll see what will be added before anything is saved, and re-importing the same report never double counts.</p>
       </header>
+
+      <AutoImports onImported={() => imports.reload()} />
 
       <div className="card stack">
         <div className="form-row">

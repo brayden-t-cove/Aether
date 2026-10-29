@@ -20,6 +20,9 @@
   --status-neutral: #98a2b3;
   --status-active: #3b5bdb;
   --status-good: #0ca30c;
+  /* Trend text: a darker green and red that read as small text on white. */
+  --trend-down-text: #0b7a0b;
+  --trend-up-text: #b42d2d;
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
@@ -55,6 +58,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    --trend-down-text: #3fbf3f;
+    --trend-up-text: #f07070;
     --bg: #0e1517;
     --surface: #152022;
     --surface-2: #1b292b;
@@ -95,6 +100,8 @@
 }
 
 :root[data-theme='dark'] {
+  --trend-down-text: #3fbf3f;
+  --trend-up-text: #f07070;
   --bg: #0e1517;
   --surface: #152022;
   --surface-2: #1b292b;
@@ -2495,4 +2502,84 @@ mark.matched {
   font-weight: 500;
   padding: 0;
   margin-bottom: 0.4rem;
+}
+
+/* Returns filters: several products, and a custom date range. */
+.multi-select {
+  position: relative;
+}
+.multi-select > summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+  background: var(--surface, var(--bg));
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.multi-select > summary::-webkit-details-marker {
+  display: none;
+}
+.multi-select[open] > summary {
+  border-color: var(--accent);
+}
+.multi-pop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  width: min(22rem, 90vw);
+  max-height: 22rem;
+  overflow: auto;
+  background: var(--surface, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.multi-pop ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.date-range input {
+  width: auto;
+}
+
+/* Returns trends: going up is bad. */
+.trend-up {
+  color: var(--trend-up-text);
+}
+.trend-up.is-rising {
+  font-weight: 600;
+}
+.trend-down {
+  color: var(--trend-down-text);
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.segmented .btn {
+  border-radius: 0;
+}
+.segmented .btn.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.bucket-products {
+  margin: 0.25rem 0 1rem;
+}
+.bucket-products h4 {
+  margin: 0 0 0.5rem;
 }

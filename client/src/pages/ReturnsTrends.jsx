@@ -27,15 +27,16 @@ function WeeklyColumns({ weeks, value, ariaLabel }) {
   return <StackedColumns data={columns} series={used.length ? used : SERIES.slice(0, 1)} ariaLabel={ariaLabel} />;
 }
 
+// Returns going up is bad: rises are red (a big rise, 3+ and 50%+, is marked "rising"), falls green.
 function Change({ c }) {
   if (c.delta === 0) return <span className="muted">no change</span>;
   const text = `${c.delta > 0 ? '+' : '−'}${Math.abs(c.delta)}${c.pct !== null ? ` (${c.pct > 0 ? '+' : '−'}${Math.abs(c.pct)}%)` : ''}`;
-  return c.rising ? (
-    <span className="warning-text">
-      ▲ {text} <span className="small">rising</span>
+  if (c.delta < 0) return <span className="trend-down">▼ {text}</span>;
+  return (
+    <span className={`trend-up ${c.rising ? 'is-rising' : ''}`}>
+      ▲ {text}
+      {c.rising && <span className="small"> rising</span>}
     </span>
-  ) : (
-    <span>{text}</span>
   );
 }
 
@@ -132,7 +133,7 @@ export function WeekOverWeek({ data }) {
           </div>
         )}
         <p className="muted small">
-          Mentions: feedback that names two problems counts in both buckets. ▲ marks a rise of at least 3 and 50%. Feedback with no note or a Generic one isn't in this table; see Blank notes.{' '}
+          Mentions: feedback that names two problems counts in both buckets. Rises are red and falls green; “rising” marks a rise of at least 3 and 50%. Feedback with no note or a Generic one isn't in this table; see Blank notes.{' '}
           <button className="link-btn" onClick={() => setShowAll((s) => !s)} aria-pressed={showAll}>
             {showAll ? 'Hide earlier weeks' : `Show all ${data.weeks.length} weeks`}
           </button>

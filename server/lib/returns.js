@@ -21,7 +21,7 @@ export const MENTIONS = `(
 // A review's mentions that count, as a subquery on r.
 const mentionsOf = (cond = 'true') => `(SELECT count(*) FROM ${MENTIONS} mm WHERE mm.return_id = r.id AND ${cond})`;
 
-function filters({ from, to, channel, productId, marketId, flag, blank, bucket, noted, subreason }, extra = []) {
+function filters({ from, to, channel, productId, productIds, marketId, flag, blank, bucket, noted, subreason }, extra = []) {
   const where = [...extra];
   const params = [];
   const add = (sql, value) => {
@@ -31,7 +31,10 @@ function filters({ from, to, channel, productId, marketId, flag, blank, bucket, 
   if (from) add('r.return_date >= ?', from);
   if (to) add('r.return_date <= ?', to);
   if (channel) add('r.channel = ?', channel);
-  if (productId) add('r.product_id = ?', productId);
+  // Several products (the filters pick any number) and/or one (a product opened within them): both must hold.
+  let products = productIds?.length ? productIds : null;
+  if (productId) products = products ? products.filter((id) => id === productId) : [productId];
+  if (products) add('r.product_id = ANY(?::uuid[])', products);
   if (marketId) add('r.market_id = ?', marketId);
   if (flag) add('EXISTS (SELECT 1 FROM return_flags f WHERE f.return_id = r.id AND f.flag = ? AND f.active)', flag);
   // Reviews that mention a bucket (and a sub-reason in it). Generic is a group of whole reviews, not a mention.
@@ -80,8 +83,10 @@ export async function returnsSummary(db, opts = {}) {
     q(`SELECT c.key AS category_key, s.key, s.name, sum(r.quantity)::int AS units
          ${from} LEFT JOIN return_subreasons s ON s.id = r.subreason_id ${all.where} ${all.where ? 'AND' : 'WHERE'} c.set_aside
         GROUP BY c.key, s.key, s.name, c.sort_order, s.sort_order ORDER BY c.sort_order, s.sort_order`, all.params),
-    q(`SELECT to_char(date_trunc('month', r.return_date), 'YYYY-MM') AS month, r.channel, sum(r.quantity)::int AS units
-         ${from} ${trend.where} GROUP BY 1, 2 ORDER BY 1, 2`, trend.params),
+    // Units per month by channel and product, for the trend chart (shown by channel or by product).
+    q(`SELECT to_char(date_trunc('month', r.return_date), 'YYYY-MM') AS month, r.channel, r.product_id, COALESCE(tp.name, 'Unmatched') AS product_name,
+              sum(r.quantity)::int AS units
+         ${from} LEFT JOIN products tp ON tp.id = r.product_id ${trend.where} GROUP BY 1, 2, 3, 4 ORDER BY 1, 2`, trend.params),
     // Mentions per bucket, most first.
     q(`SELECT mm.bucket AS key, bc.name, count(*)::int AS mentions
          ${from} ${joinMentions} JOIN return_categories bc ON bc.key = mm.bucket ${where}
@@ -126,7 +131,7 @@ const mondayOf = (iso) => addDays(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay
  */
 export async function returnsWeekly(db, { weeks = 12, end, ...opts } = {}) {
   const { rows: [{ today }] } = await db.query(`SELECT (now() AT TIME ZONE '${RETURNS_TZ}')::date::text AS today`);
-  const count = Math.min(Math.max(Number(weeks) || 12, 2), 52);
+  const count = Math.min(Math.max(Number(weeks) || 12, 2), 104);
   const last = mondayOf(end || today);
   const list = Array.from({ length: count }, (_, i) => addDays(last, (i - count + 1) * 7));
   const { where, params } = filters({ ...opts, from: list[0], to: addDays(last, 6) }, ['NOT COALESCE(c.set_aside, false)']);

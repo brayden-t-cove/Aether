@@ -96,11 +96,11 @@ describe.skipIf(!TEST_DATABASE_URL)('phase 4: listings, returns, comparisons', (
       const { body } = await viewer.agent.get('/api/returns/summary').expect(200);
       // The carrier-damaged return never reached a customer, so it is set aside; it still waits for a product.
       expect(body.totals).toMatchObject({ reviews: 5, units: 6, set_aside_units: 1, unmatched_units: 1, mentions: 1, mentioning_reviews: 1, no_comment_reviews: 4, first_date: '2026-08-03', last_date: '2026-09-12' });
-      expect(body.byMonth).toEqual([
-        { month: '2026-08', channel: 'amazon', units: 3 },
-        { month: '2026-09', channel: 'amazon', units: 1 },
-        { month: '2026-09', channel: 'tiktok', units: 2 },
-      ]);
+      // Monthly units come by channel and product; added up by channel:
+      const byChannel = {};
+      for (const m of body.byMonth) byChannel[`${m.month} ${m.channel}`] = (byChannel[`${m.month} ${m.channel}`] || 0) + m.units;
+      expect(byChannel).toEqual({ '2026-08 amazon': 3, '2026-09 amazon': 1, '2026-09 tiktok': 2 });
+      expect(body.byMonth.find((m) => m.product_id === doorbell.id)).toMatchObject({ product_name: 'Doorbell Cam Pro' });
       const top = body.byProduct[0];
       expect(top).toMatchObject({ product_id: doorbell.id, name: 'Doorbell Cam Pro', reviews: 4, units: 5 });
       expect(body.productBuckets).toEqual([{ product_id: doorbell.id, bucket: 'connectivity', mentions: 1 }]);

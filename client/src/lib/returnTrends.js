@@ -76,13 +76,27 @@ export function productBreakdown(rows) {
   return [...products.values()].sort((a, b) => b.units - a.units || a.name.localeCompare(b.name));
 }
 
-/** "Sep 21–27" or "Sep 28 – Oct 4". */
+/**
+ * The ISO 8601 week number of a date (YYYY-MM-DD): weeks start on Monday, and week 1 is the one with the year's first
+ * Thursday. Oct 5–11, 2026 is week 41.
+ */
+export function isoWeek(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const thursday = new Date(d);
+  thursday.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
+  const jan4 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((thursday - jan4) / 86400000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
+}
+
+/** "Wk 39 · Sep 21–27" or "Wk 40 · Sep 28 – Oct 4". */
 export function weekLabel(w) {
   const d = (iso) => new Date(`${iso}T00:00:00Z`);
   const start = d(w.week);
   const end = d(w.end);
   const month = (x) => x.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
-  return start.getUTCMonth() === end.getUTCMonth()
-    ? `${month(start)} ${start.getUTCDate()}–${end.getUTCDate()}`
-    : `${month(start)} ${start.getUTCDate()} – ${month(end)} ${end.getUTCDate()}`;
+  const days =
+    start.getUTCMonth() === end.getUTCMonth()
+      ? `${month(start)} ${start.getUTCDate()}–${end.getUTCDate()}`
+      : `${month(start)} ${start.getUTCDate()} – ${month(end)} ${end.getUTCDate()}`;
+  return `Wk ${isoWeek(w.week)} · ${days}`;
 }

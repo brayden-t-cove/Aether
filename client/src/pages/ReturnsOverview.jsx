@@ -258,11 +258,36 @@ function SubreasonList({ bucket, query, options, onChanged }) {
   );
 }
 
+// Colours for products in a breakdown: the six series colours, then everything else together.
+const PRODUCT_COLORS = ['--series-1', '--series-2', '--series-3', '--series-4', '--series-5', '--series-6'];
+
+/** Top products first, the rest as "Other products". rows: [{ key, label, value }] → donut slices with colours. */
+export function topProducts(rows, top = 6) {
+  const sorted = [...rows].filter((r) => r.value).sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  const head = sorted.slice(0, sorted.length > top ? top - 1 : top).map((r, i) => ({ ...r, color: PRODUCT_COLORS[i] }));
+  const rest = sorted.slice(head.length);
+  return rest.length ? [...head, { key: 'other-products', label: `Other products (${rest.length})`, value: rest.reduce((n, r) => n + r.value, 0), color: '--series-other' }] : head;
+}
+
+/** Which products a bucket's mentions come from, as a pie. */
+function BucketProducts({ bucket, productBuckets, productNames }) {
+  const rows = productBuckets
+    .filter((x) => x.bucket === bucket.key)
+    .map((x) => ({ key: x.product_id || 'unmatched', label: productNames.get(x.product_id) || 'Unmatched', value: x.mentions }));
+  if (!rows.length) return null;
+  return (
+    <div className="bucket-products">
+      <h4>By product</h4>
+      <Donut ariaLabel={`${bucket.name} mentions by product`} data={topProducts(rows)} center={bucket.mentions} centerLabel="mentions" size={150} />
+    </div>
+  );
+}
+
 /**
  * The key: each bucket with its definition, mentions and the share of reviews that mention it; opening one shows
  * its sub-reasons. Below, the two groups that aren't mentions: Generic and No Comment.
  */
-function BucketKey({ buckets, groups, base, onSaved, query, options, onChanged }) {
+function BucketKey({ buckets, groups, base, onSaved, query, options, onChanged, productBuckets = [], productNames = new Map() }) {
   const [open, setOpen] = useState(null);
   const row = (b, value, share, body) => {
     const isOpen = open === b.key;
@@ -291,7 +316,15 @@ function BucketKey({ buckets, groups, base, onSaved, query, options, onChanged }
   return (
     <ul className="bucket-key">
       {buckets.map((b) =>
-        row(b, count(b.mentions, 'mention', 'mentions'), `${pct(b.mentions, base.n)}% ${base.label}`, <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />),
+        row(
+          b,
+          count(b.mentions, 'mention', 'mentions'),
+          `${pct(b.mentions, base.n)}% ${base.label}`,
+          <>
+            <BucketProducts bucket={b} productBuckets={productBuckets} productNames={productNames} />
+            <SubreasonList bucket={b} query={query} options={options} onChanged={onChanged} />
+          </>,
+        ),
       )}
       {groups.map((g) =>
         row(
@@ -564,9 +597,11 @@ function OtherSection({ query }) {
   );
 }
 
-export default function ReturnsOverview({ data, codebook, query, monthName, onCodebookChanged, onReturnsChanged }) {
+export default function ReturnsOverview({ data, codebook, query, monthName, trendEnd = monthName, onCodebookChanged, onReturnsChanged }) {
   const [showTable, setShowTable] = useState(false);
   const [params, setParams] = useSearchParams();
+  // Units per month: stacked by channel, or by product (?trend=product).
+  const trendBy = params.get('trend') === 'product' ? 'product' : 'channel';
   const t = data.totals;
   // Feedback with no comment is hidden unless asked for: percentages are then of feedback with a comment, which is
   // what says why something came back. Shown, they're of all feedback.
@@ -597,18 +632,34 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
   };
   const groups = [group('generic', GENERIC.color, t.generic_reviews), ...(withBlank ? [group('no_comment', '--series-blank', t.no_comment_reviews)] : [])];
   const options = codebook.filter((c) => c.in_share);
+  const productNames = new Map(data.byProduct.map((p) => [p.product_id, p.name]));
   const top = [...buckets].filter((b) => b.key !== OTHER_BUCKET).sort((a, b) => b.mentions - a.mentions)[0];
 
   const months = [...new Set(data.byMonth.map((r) => r.month))].sort();
+  // By product: the six products with the most units in the chart's months, then the rest together.
+  const productTotals = new Map();
+  for (const r of data.byMonth) {
+    const k = r.product_id || 'unmatched';
+    productTotals.set(k, { key: k, label: r.product_name, value: (productTotals.get(k)?.value || 0) + r.units });
+  }
+  const productSeries = topProducts([...productTotals.values()]).map((p) => ({ key: p.key, label: p.label, color: p.color }));
+  const seriesOf = (row) => {
+    if (trendBy === 'channel') return row.channel === 'amazon' || row.channel === 'tiktok' ? row.channel : 'other';
+    const k = row.product_id || 'unmatched';
+    return productSeries.some((p) => p.key === k) ? k : 'other-products';
+  };
   const columns = months.map((m) => {
     const values = {};
-    for (const row of data.byMonth.filter((r) => r.month === m)) {
-      const k = row.channel === 'amazon' || row.channel === 'tiktok' ? row.channel : 'other';
-      values[k] = (values[k] || 0) + row.units;
-    }
+    for (const row of data.byMonth.filter((r) => r.month === m)) values[seriesOf(row)] = (values[seriesOf(row)] || 0) + row.units;
     return { key: m, label: new Date(`${m}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), values };
   });
-  const usedSeries = SERIES.filter((s) => columns.some((c) => c.values[s.key]));
+  const usedSeries = (trendBy === 'channel' ? SERIES : productSeries).filter((s) => columns.some((c) => c.values[s.key]));
+  const setTrendBy = (by) => {
+    const next = new URLSearchParams(params);
+    if (by === 'product') next.set('trend', 'product');
+    else next.delete('trend');
+    setParams(next, { replace: true });
+  };
 
   return (
     <>
@@ -696,7 +747,13 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
           counts once. A change of mind counts only when nothing else is mentioned. A note that says nothing specific is Generic. Notes the rules can’t place
           go to Other until someone files them. Open a bucket for its sub-reasons, and a sub-reason for every piece of feedback behind it.
         </p>
-        <BucketKey buckets={buckets} groups={groups} base={base} onSaved={onCodebookChanged} query={query} options={options} onChanged={onReturnsChanged} />
+        <BucketKey
+          buckets={buckets}
+          groups={groups}
+          base={base}
+          productBuckets={data.productBuckets}
+          productNames={productNames}
+          onSaved={onCodebookChanged} query={query} options={options} onChanged={onReturnsChanged} />
       </section>
 
       <section className="card">
@@ -733,9 +790,19 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
       <section className="card">
         <div className="row between">
           <h2>Units returned per month</h2>
-          <button className="btn ghost small" onClick={() => setShowTable((s) => !s)} aria-pressed={showTable}>
-            {showTable ? 'Show chart' : 'Show table'}
-          </button>
+          <div className="row">
+            <div className="segmented" role="group" aria-label="Split units by">
+              <button className={`btn ghost small ${trendBy === 'channel' ? 'is-on' : ''}`} aria-pressed={trendBy === 'channel'} onClick={() => setTrendBy('channel')}>
+                By channel
+              </button>
+              <button className={`btn ghost small ${trendBy === 'product' ? 'is-on' : ''}`} aria-pressed={trendBy === 'product'} onClick={() => setTrendBy('product')}>
+                By product
+              </button>
+            </div>
+            <button className="btn ghost small" onClick={() => setShowTable((s) => !s)} aria-pressed={showTable}>
+              {showTable ? 'Show chart' : 'Show table'}
+            </button>
+          </div>
         </div>
         {showTable ? (
           <div className="table-wrap">
@@ -767,9 +834,9 @@ export default function ReturnsOverview({ data, codebook, query, monthName, onCo
             </table>
           </div>
         ) : (
-          <StackedColumns data={columns} series={usedSeries} ariaLabel="Units returned per month by channel" />
+          <StackedColumns data={columns} series={usedSeries} ariaLabel={`Units returned per month by ${trendBy}`} />
         )}
-        <p className="muted small">The 12 months up to {monthName}.</p>
+        <p className="muted small">The months up to {trendEnd}, from at least 12 months back.</p>
       </section>
     </>
   );

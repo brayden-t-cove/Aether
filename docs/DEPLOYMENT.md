@@ -17,6 +17,8 @@ Aether is one Node server plus Postgres. Production runs on Railway; this page c
 | `PUBLIC_URL` | No | Public address, needed with a custom domain (Railway sets its own) |
 | `FILES_DIR`, `MAX_UPLOAD_MB` | No | Folder for uploaded files, and the size limit (default 25) |
 | `ODYSSEY_API_URL`, `ODYSSEY_API_KEY`, `ODYSSEY_SYNC_MINUTES` | No | Odyssey sync (see `docs/ODYSSEY_API.md`) |
+| `AMAZON_SP_CLIENT_ID`, `AMAZON_SP_CLIENT_SECRET`, `AMAZON_SP_REFRESH_TOKEN` (and optional `_MARKETPLACE_ID`, `_REGION`, `_SYNC_HOURS`) | No | Automatic Amazon returns imports (see `docs/MARKETPLACE_APIS.md`) |
+| `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET` (and optional `TIKTOK_REFRESH_TOKEN`, `TIKTOK_SHOP_CIPHER`, `TIKTOK_SYNC_HOURS`) | No | Automatic TikTok returns imports; the shop is authorized from Admin → Integrations (see `docs/MARKETPLACE_APIS.md`) |
 | `ASANA_TOKEN`, `ASANA_SYNC_MINUTES` | No | Asana, read-only: a personal access token, and how often comments are pulled (default 15). Aether sees what the token's owner sees |
 | `SLACK_WEBHOOK_URL`, `DIGEST_HOUR_UTC` | No | Slack notifications and the daily digest time (default 14 = 9am Central) |
 

@@ -34,10 +34,12 @@ function Action({ label, path, onDone }) {
 
 export default function IntegrationsPage() {
   const { data, error, reload } = useLoad('/api/admin/integrations');
+  // After authorizing the TikTok shop, TikTok sends the admin back here with ?tiktok=connected (or why it failed).
+  const tiktokNotice = new URLSearchParams(window.location.search).get('tiktok');
 
   if (error) return <div className="page"><ErrorNote error={error} /></div>;
   if (!data) return <div className="page"><p className="muted">Loading…</p></div>;
-  const { app, odyssey, asana, slack, uploads, database } = data;
+  const { app, odyssey, asana, amazon, tiktok, slack, uploads, database } = data;
 
   return (
     <div className="page narrow-ish">
@@ -93,6 +95,111 @@ export default function IntegrationsPage() {
           <p className="muted small">
             Set <code>ODYSSEY_API_URL</code> and <code>ODYSSEY_API_KEY</code>. Odyssey needs a small change to accept the key; see <code>docs/ODYSSEY_API.md</code>.
           </p>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="row between">
+          <h2>Amazon returns</h2>
+          <StatusBadge status={on(amazon.configured)} />
+        </div>
+        {amazon.configured ? (
+          <>
+            <p className="small">
+              Read-only. Imports the FBA customer returns report every {amazon.syncHours} hours, over the last two weeks, through the same import as an upload
+              (duplicates skipped). Marketplace {amazon.marketplaceId}.
+              {amazon.lastSuccessAt ? ` Last successful import ${formatDateTime(amazon.lastSuccessAt)}.` : ' No successful import yet.'}
+            </p>
+            <Action label="Import now" path="/api/returns/auto-imports/amazon" onDone={reload} />
+            {amazon.runs.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Started</th>
+                      <th>By</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {amazon.runs.map((r) => (
+                      <tr key={r.id}>
+                        <td className="small">{formatDateTime(r.started_at)}</td>
+                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">
+                          {r.ok === null ? 'Running…' : r.ok ? `${r.returns_created} new of ${r.rows_read} rows` : <span className="error-text">{r.error}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted small">
+            Set <code>AMAZON_SP_CLIENT_ID</code>, <code>AMAZON_SP_CLIENT_SECRET</code> and <code>AMAZON_SP_REFRESH_TOKEN</code> from a private app in
+            Seller Central (Apps and Services → Develop Apps) with the Amazon Fulfillment role. See docs/MARKETPLACE_APIS.md.
+          </p>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="row between">
+          <h2>TikTok returns</h2>
+          <StatusBadge status={on(tiktok.configured && tiktok.authorized, 'Connected', tiktok.configured ? 'Shop not authorized' : 'Not set up')} />
+        </div>
+        {tiktokNotice && <p className={`small ${tiktokNotice === 'connected' ? '' : 'error-text'}`}>{tiktokNotice === 'connected' ? 'The TikTok shop is connected.' : tiktokNotice}</p>}
+        {!tiktok.configured ? (
+          <p className="muted small">
+            Set <code>TIKTOK_APP_KEY</code> and <code>TIKTOK_APP_SECRET</code> from an app in TikTok Shop Partner Center with the Return &amp; Refund scope.
+            See docs/MARKETPLACE_APIS.md.
+          </p>
+        ) : !tiktok.authorized ? (
+          <div className="small stack-tight">
+            <p>To finish, an admin authorizes the shop for Aether:</p>
+            <ol>
+              <li>
+                In Partner Center, set the app's redirect URL to <code>{tiktok.callbackUrl}</code>.
+              </li>
+              <li>Open the app's authorization link (Partner Center → the app → Authorize), signed in to Aether here as an admin, and approve it for the shop.</li>
+              <li>TikTok sends you back here, and this card shows Connected.</li>
+            </ol>
+          </div>
+        ) : (
+          <>
+            <p className="small">
+              Read-only. Imports {tiktok.shop || 'the shop'}'s returns every {tiktok.syncHours} hours, over the last two weeks, through the same import as an
+              upload (duplicates skipped).
+              {tiktok.lastSuccessAt ? ` Last successful import ${formatDateTime(tiktok.lastSuccessAt)}.` : ' No successful import yet.'}
+            </p>
+            <Action label="Import now" path="/api/returns/auto-imports/tiktok" onDone={reload} />
+            {tiktok.runs.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Started</th>
+                      <th>By</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tiktok.runs.map((r) => (
+                      <tr key={r.id}>
+                        <td className="small">{formatDateTime(r.started_at)}</td>
+                        <td className="small">{r.started_by_name || 'Schedule'}</td>
+                        <td className="small">
+                          {r.ok === null ? 'Running…' : r.ok ? `${r.returns_created} new of ${r.rows_read} rows` : <span className="error-text">{r.error}</span>}
+                          {r.detail && <div className="muted">{r.detail}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
 

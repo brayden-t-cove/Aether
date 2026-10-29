@@ -64,6 +64,10 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   await page.getByRole('button', { name: 'Show table' }).click();
   await expect(page.locator('th', { hasText: 'Total' })).toBeVisible();
   await page.getByRole('button', { name: 'Show chart' }).click();
+  // The same months split by product instead of channel.
+  await page.getByRole('button', { name: 'By product' }).click();
+  await expect(page.getByRole('img', { name: 'Units returned per month by product' })).toBeVisible();
+  await page.getByRole('button', { name: 'By channel' }).click();
 
   await page.getByRole('button', { name: 'Previous month' }).click();
   await expect(page.getByLabel('Month to show')).toHaveValue('2026-08');
@@ -80,6 +84,8 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   const bucket = page.getByRole('button', { name: /^Performance \/ Hardware/ });
   await expect(bucket).toContainText("The camera connects but doesn't do its job");
   await bucket.click();
+  // Which products its mentions come from, as a pie.
+  await expect(page.getByRole('img', { name: 'Performance / Hardware mentions by product' })).toBeVisible();
   const subs = page.getByRole('list', { name: 'Performance / Hardware by sub-reason' });
   await expect(subs).toContainText('Works briefly then dies');
   await expect(subs).toContainText('0 of 1 checked');
@@ -96,6 +102,31 @@ test('the returns page shows one month: buckets, comments, the key, platform vs 
   await expect(products.locator('.product-detail')).toContainText('“Stopped working”');
   await expect(stat('Feedback')).toHaveText('1');
   await expect(page).not.toHaveURL(/productId/);
+});
+
+test('the returns page covers any period and any set of products', async ({ page }) => {
+  await login(page);
+  const stat = (label) => page.locator('.stat').filter({ has: page.locator('.stat-label').getByText(label, { exact: true }) }).locator('.stat-value');
+  // A custom range across three months, with feedback that has no comment included.
+  await page.goto('/returns?period=custom&from=2026-07-01&to=2026-09-30&blank=1');
+  await expect(page.getByLabel('Period')).toHaveValue('custom');
+  await expect(page.getByLabel('From')).toHaveValue('2026-07-01');
+  await expect(stat('Feedback')).toHaveText('3');
+
+  // Several products at once, by Aether's own names.
+  await page.getByLabel(/^Products: All/).click();
+  await page.getByRole('group', { name: 'Products' }).getByLabel(/Sample Doorbell/).click();
+  await expect(page).toHaveURL(/products=/);
+  await expect(stat('Feedback')).toHaveText('2');
+  await expect(page.getByLabel(/^Products: Sample Doorbell/)).toBeVisible();
+  await page.getByRole('button', { name: 'Clear: show all products' }).click();
+  await expect(stat('Feedback')).toHaveText('3');
+
+  // A preset replaces the custom range; picking a month goes back to one month.
+  await page.getByLabel('Period').selectOption('ytd');
+  await expect(page.getByLabel('From')).toHaveCount(0);
+  await page.getByLabel('Period').selectOption('month');
+  await expect(page.getByLabel('Month to show')).toBeVisible();
 });
 
 test('an unmatched return is assigned and future imports learn the match', async ({ page }) => {
