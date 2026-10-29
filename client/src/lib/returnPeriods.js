@@ -68,8 +68,9 @@ export function resolvePeriod(params, today) {
       month = shiftMonth(thisMonth, -1);
       [from, to] = [firstDay(month), lastDay(month)];
       break;
+    // Like Last 12 months, this month so far plus the whole months before it, so it always holds month to date.
     case 'last_3_months':
-      [from, to] = [firstDay(shiftMonth(thisMonth, -3)), lastDay(shiftMonth(thisMonth, -1))];
+      [from, to] = [firstDay(shiftMonth(thisMonth, -2)), today];
       break;
     case 'qtd':
       [from, to] = [firstDay(quarterStart), today];
